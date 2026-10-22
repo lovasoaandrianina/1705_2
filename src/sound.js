@@ -1,45 +1,106 @@
 // Sons de jeu synthétisés avec WebAudio : aucun fichier à charger, rien à héberger.
+// Optimisé pour Safari iOS et Chrome mobile (déblocage AudioContext après geste utilisateur).
 import { useEffect, useRef } from "react";
 
 let ctx = null, master = null, noiseBuf = null;
+let unlocked = false;
 let muted = (() => { try { return localStorage.getItem("snd_muted") === "1"; } catch { return false; } })();
 const subs = new Set();
 
-function ac() {
-  if (!ctx) {
-    const C = window.AudioContext || window.webkitAudioContext;
-    if (!C) return null;
-    ctx = new C(); master = ctx.createGain(); master.gain.value = 0.55; master.connect(ctx.destination);
+function createCtx() {
+  if (ctx) return ctx;
+  const C = window.AudioContext || window.webkitAudioContext;
+  if (!C) return null;
+  try {
+    ctx = new C();
+    master = ctx.createGain();
+    master.gain.value = 0.55;
+    master.connect(ctx.destination);
+  } catch {
+    ctx = null;
+    master = null;
   }
-  if (ctx.state === "suspended") ctx.resume().catch(() => {});
   return ctx;
 }
-// les navigateurs exigent un geste de l'utilisateur avant de produire du son
-if (typeof window !== "undefined") for (const ev of ["pointerdown", "keydown", "touchstart"]) window.addEventListener(ev, () => ac(), { passive: true });
+
+/** Débloque l'AudioContext (obligatoire sur iOS Safari / Chrome Android). */
+function unlock() {
+  const c = createCtx();
+  if (!c) return;
+  if (c.state === "suspended") {
+    c.resume().catch(() => {});
+  }
+  // Buffer silencieux : force le déblocage sur certains WebKit
+  if (!unlocked) {
+    try {
+      const buf = c.createBuffer(1, 1, 22050);
+      const src = c.createBufferSource();
+      src.buffer = buf;
+      src.connect(c.destination);
+      src.start(0);
+      unlocked = true;
+    } catch { /* ignore */ }
+  }
+}
+
+function ac() {
+  const c = createCtx();
+  if (!c) return null;
+  if (c.state === "suspended") c.resume().catch(() => {});
+  return c;
+}
+
+// les navigateurs (surtout mobiles) exigent un geste utilisateur avant le son
+if (typeof window !== "undefined") {
+  const unlockOnce = () => {
+    unlock();
+    // on garde les listeners : le contexte peut se resuspendre (app en arrière-plan, interruption)
+  };
+  for (const ev of ["pointerdown", "touchstart", "touchend", "keydown", "click", "mousedown"]) {
+    window.addEventListener(ev, unlockOnce, { passive: true, capture: true });
+  }
+  // reprise quand l'onglet redevient visible
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") unlock();
+  });
+  // iOS : reprise après interruption audio (appel, Siri…)
+  if (typeof window !== "undefined") {
+    window.addEventListener("pageshow", unlockOnce);
+  }
+}
 
 export const isMuted = () => muted;
-export function setMuted(m) { muted = m; try { localStorage.setItem("snd_muted", m ? "1" : "0"); } catch { /* stockage indisponible */ } subs.forEach((f) => f()); }
+export function setMuted(m) {
+  muted = m;
+  try { localStorage.setItem("snd_muted", m ? "1" : "0"); } catch { /* stockage indisponible */ }
+  if (!m) unlock(); // en réactivant, on force le déblocage
+  subs.forEach((f) => f());
+}
 export const onMuteChange = (f) => { subs.add(f); return () => subs.delete(f); };
 
 function tone(f, d, { type = "sine", vol = 0.25, at = 0, to = null, a = 0.005, swell = false } = {}) {
   const c = ac(); if (!c || muted) return;
-  const t = c.currentTime + at, o = c.createOscillator(), g = c.createGain();
-  o.type = type; o.frequency.setValueAtTime(f, t);
-  if (to) o.frequency.exponentialRampToValueAtTime(to, t + d);
-  g.gain.setValueAtTime(0.0001, t);
-  if (swell) { g.gain.exponentialRampToValueAtTime(vol, t + d * 0.85); g.gain.exponentialRampToValueAtTime(0.0001, t + d); }
-  else { g.gain.exponentialRampToValueAtTime(vol, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + d); }
-  o.connect(g); g.connect(master); o.start(t); o.stop(t + d + 0.03);
+  try {
+    const t = c.currentTime + at, o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t);
+    if (to) o.frequency.exponentialRampToValueAtTime(Math.max(0.01, to), t + d);
+    g.gain.setValueAtTime(0.0001, t);
+    if (swell) { g.gain.exponentialRampToValueAtTime(vol, t + d * 0.85); g.gain.exponentialRampToValueAtTime(0.0001, t + d); }
+    else { g.gain.exponentialRampToValueAtTime(vol, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + d); }
+    o.connect(g); g.connect(master); o.start(t); o.stop(t + d + 0.03);
+  } catch { /* ne jamais casser le jeu */ }
 }
 function noise(d, { vol = 0.3, at = 0, type = "bandpass", f = 2000, q = 1, to = null, swell = false } = {}) {
   const c = ac(); if (!c || muted) return;
-  if (!noiseBuf) { noiseBuf = c.createBuffer(1, c.sampleRate, c.sampleRate); const ch = noiseBuf.getChannelData(0); for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1; }
-  const t = c.currentTime + at, s = c.createBufferSource(), flt = c.createBiquadFilter(), g = c.createGain();
-  s.buffer = noiseBuf; flt.type = type; flt.Q.value = q; flt.frequency.setValueAtTime(f, t);
-  if (to) flt.frequency.exponentialRampToValueAtTime(to, t + d);
-  if (swell) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + d * 0.85); g.gain.exponentialRampToValueAtTime(0.0001, t + d); }
-  else { g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d); }
-  s.connect(flt); flt.connect(g); g.connect(master); s.start(t, Math.random() * 0.5); s.stop(t + d + 0.03);
+  try {
+    if (!noiseBuf) { noiseBuf = c.createBuffer(1, c.sampleRate, c.sampleRate); const ch = noiseBuf.getChannelData(0); for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1; }
+    const t = c.currentTime + at, s = c.createBufferSource(), flt = c.createBiquadFilter(), g = c.createGain();
+    s.buffer = noiseBuf; flt.type = type; flt.Q.value = q; flt.frequency.setValueAtTime(f, t);
+    if (to) flt.frequency.exponentialRampToValueAtTime(Math.max(0.01, to), t + d);
+    if (swell) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + d * 0.85); g.gain.exponentialRampToValueAtTime(0.0001, t + d); }
+    else { g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d); }
+    s.connect(flt); flt.connect(g); g.connect(master); s.start(t, Math.random() * 0.5); s.stop(t + d + 0.03);
+  } catch { /* ignore */ }
 }
 
 const chip = (at = 0, k = 0) => { tone(2500 + k * 180, 0.07, { type: "triangle", vol: 0.17, at }); tone(3400 + k * 140, 0.06, { type: "triangle", vol: 0.1, at: at + 0.04 }); noise(0.03, { vol: 0.15, at, f: 5200 }); };
@@ -74,7 +135,7 @@ const S = {
   riser: (d = 2) => { tone(110, d, { type: "sawtooth", vol: 0.05, to: 330, swell: true }); noise(d, { vol: 0.12, f: 400, to: 3200, q: 2, swell: true }); },
   flip: () => { noise(0.16, { vol: 0.5, f: 1800, to: 5200, q: 0.8 }); tone(500, 0.12, { vol: 0.07, to: 800 }); tone(1320, 0.45, { vol: 0.07, at: 0.08 }); },
 };
-export const play = (name, ...args) => { try { S[name]?.(...args); } catch { /* le son ne doit jamais casser le jeu */ } };
+export const play = (name, ...args) => { try { unlock(); S[name]?.(...args); } catch { /* le son ne doit jamais casser le jeu */ } };
 
 // Appelle cb(nouvelle, ancienne) quand la valeur change (pas au premier affichage)
 export function useWatch(val, cb) {

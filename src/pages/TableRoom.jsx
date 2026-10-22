@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
-import { fmt, pct, rulesText, optionsText, GAME_NAMES } from "../config";
+import { fmt, pct, rulesList, optionsList, GAME_NAMES } from "../config";
 import RamiOnline from "../games/RamiOnline";
 import DominoOnline from "../games/DominoOnline";
 import ChatDock from "../components/Chat";
@@ -46,10 +46,19 @@ export default function TableRoom({ id, user, onExit }) {
       <h1>{GAME_NAMES[kind]} · table #{v.id}</h1>
       {chat}
       <p className="sub">Mise {fmt(v.stake)} · {v.players.length}/{v.maxPlayers} joueurs</p>
-      <div className="info">
-        {rulesText(v.config, kind)}<br />{optionsText(v.config, kind)}<br />
-        Pot actuel : {fmt(v.pot)}<br />
+      <div className="sec">Règles</div>
+      <div className="rule-cards">
+        {rulesList(v.config, kind).map((r, i) => (
+          <div className="rule-card" key={`r-${i}`}>{r}</div>
+        ))}
       </div>
+      <div className="sec">Options</div>
+      <div className="rule-cards">
+        {optionsList(v.config, kind).map((r, i) => (
+          <div className="rule-card" key={`o-${i}`}>{r}</div>
+        ))}
+      </div>
+      <div className="info">Pot actuel : {fmt(v.pot)}</div>
 
       <div className="sec">Inviter des amis</div>
       <div className="linkbox">{link}</div>

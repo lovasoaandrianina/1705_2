@@ -38,7 +38,7 @@ const place = (r) => {
   return { x: 50 + 40 * Math.cos(a), y: 50 + 42 * Math.sin(a) };
 };
 
-export default function PokerTable({ id, user, onExit }) {
+export default function PokerTable({ id, user, setUser, onExit }) {
   const [v, setV] = useState(null);
   const [err, setErr] = useState("");
   const [note, setNote] = useState("");
@@ -50,6 +50,16 @@ export default function PokerTable({ id, user, onExit }) {
   const [copied, setCopied] = useState(false);
   const [add, setAdd] = useState(2000);
   const [, force] = useState(0);
+  const [wallet, setWallet] = useState(user?.balance); // solde compte (mis à jour après chaque main)
+  useEffect(() => { setWallet(user?.balance); }, [user?.balance]);
+
+  // Relire le solde exact du compte (après défaite / fin de main)
+  const refreshWallet = useCallback(() => {
+    api.me().then((u) => {
+      setWallet(u.balance);
+      if (setUser) setUser(u);
+    }).catch(() => {});
+  }, [setUser]);
 
   const load = useCallback(() => {
     if (leaving) return;
@@ -87,6 +97,8 @@ export default function PokerTable({ id, user, onExit }) {
     if (!readyRef.current || !n) return;
     play(v.last.winners.some((w) => w.seat === v.me) ? "win" : "pot");
     if (!v.last.uncontested) setTimeout(() => play("flip"), 400);
+    // Après chaque main (surtout en cas de défaite) : afficher le solde compte exact
+    refreshWallet();
   });
   const tickLeft = v && v.legal ? Math.ceil(Math.max(0, v.msLeft - (Date.now() - v.fetchedAt)) / 1000) : 0;
   useWatch(tickLeft > 0 && tickLeft <= 5 ? tickLeft : 0, (s) => s && play("tick"));
@@ -218,7 +230,12 @@ export default function PokerTable({ id, user, onExit }) {
         </div>
         <div className="pk-mine">
           {v.myHand && !v.runout && <b>{v.myHand}</b>}
-          {seated && <small>Mes jetons : {fmt(total)}{mine.pendingAdd ? ` (dont ${fmt(mine.pendingAdd)} dès la prochaine main)` : ""}</small>}
+          {seated && (
+            <small>
+              Mes jetons : {fmt(total)}{mine.pendingAdd ? ` (dont ${fmt(mine.pendingAdd)} dès la prochaine main)` : ""}
+              {" · "}Compte : {fmt(wallet ?? user.balance)}
+            </small>
+          )}
         </div>
       </div>
 
@@ -250,7 +267,7 @@ export default function PokerTable({ id, user, onExit }) {
 
       {seated && !mine.leaving && (
         <div className="pk-foot">
-          {total < v.maxBuy && (!mine.busted || v.buyIn <= v.maxBuy) && <button onClick={() => { setAdd(mine.busted ? v.buyIn : Math.min(2000, v.maxBuy - total)); setSheet("rebuy"); }}>{mine.busted ? "Racheter des jetons" : "Recharger"}</button>}
+          {total < v.maxBuy && (!mine.busted || v.buyIn <= v.maxBuy) && <button onClick={() => { refreshWallet(); setAdd(mine.busted ? v.buyIn : Math.min(2000, v.maxBuy - total)); setSheet("rebuy"); }}>{mine.busted ? "Racheter des jetons" : "Recharger"}</button>}
           <button className={canLeave ? "" : "dim"} onClick={quit}>{canLeave ? "Quitter et encaisser" : `Quitter : bouton D dans ${v.leave.in} main${v.leave.in > 1 ? "s" : ""}`}</button>
         </div>
       )}
@@ -286,10 +303,10 @@ export default function PokerTable({ id, user, onExit }) {
           <div className="pk-box" onClick={(e) => e.stopPropagation()}>
             <h3>{mine.busted ? "Racheter des jetons" : "Recharger"}</h3>
             {mine.busted ? (
-              <p>Rachat du buy-in de la table : <b>{fmt(v.buyIn)}</b>. Solde : {fmt(user.balance)}.</p>
+              <p>Rachat du buy-in de la table : <b>{fmt(v.buyIn)}</b>. Solde compte (après défaite) : <b>{fmt(wallet ?? user.balance)}</b>.</p>
             ) : (
               <>
-                <p>Tu as {fmt(total)}. Maximum à table : {fmt(v.maxBuy)} (recharge possible : {fmt(v.maxBuy - total)}). Solde : {fmt(user.balance)}.</p>
+                <p>Tu as {fmt(total)}. Maximum à table : {fmt(v.maxBuy)} (recharge possible : {fmt(v.maxBuy - total)}). Solde compte : <b>{fmt(wallet ?? user.balance)}</b>.</p>
                 <input className="pk-in" type="number" inputMode="numeric" min="500" max={v.maxBuy - total} step="500" value={add} onChange={(e) => setAdd(e.target.value)} />
               </>
             )}

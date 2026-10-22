@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { fmt, pct, rulesText, optionsText, GAME_NAMES } from "../config";
+import { fmt, pct, rulesList, optionsList, GAME_NAMES } from "../config";
 
 export default function Invite({ id, onOpen, onBack, setQueue }) {
   const [t, setT] = useState(null);
@@ -21,8 +21,19 @@ export default function Invite({ id, onOpen, onBack, setQueue }) {
       <h1>Invitation</h1>
       <p className="sub"><b>{t.creator}</b> t'invite à sa table de {GAME_NAMES[t.kind] || "jeu"} (#{t.id})</p>
       <div className="info">
-        Mise {fmt(t.stake)} par joueur · pot à table pleine {fmt(t.stake * t.maxPlayers)}<br />
-        {rulesText(t.config, t.kind)}<br />{optionsText(t.config, t.kind)}<br />
+        Mise {fmt(t.stake)} par joueur · pot à table pleine {fmt(t.stake * t.maxPlayers)}
+      </div>
+      <div className="sec">Règles</div>
+      <div className="rule-cards">
+        {rulesList(t.config, t.kind).map((r, i) => (
+          <div className="rule-card" key={`r-${i}`}>{r}</div>
+        ))}
+      </div>
+      <div className="sec">Options</div>
+      <div className="rule-cards">
+        {optionsList(t.config, t.kind).map((r, i) => (
+          <div className="rule-card" key={`o-${i}`}>{r}</div>
+        ))}
       </div>
       <div className="sec">Joueurs ({t.players.length}/{t.maxPlayers})</div>
       {t.players.map((p) => <div className="tx" key={p}><span>{p}{p === t.creator ? " · créateur" : ""}</span></div>)}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Avatar from "../components/Avatar";
 import WalletModal from "../components/WalletModal";
+import ThemeToggle from "../components/ThemeToggle";
 import { fmt } from "../config";
 
 const GAMES = [
@@ -17,6 +18,7 @@ export default function Dashboard({ user, setUser, onLogout, onPlay }) {
       <header className="top">
         <Avatar user={user} />
         <div><b>{user.pseudo}</b><small>{user.phone}</small></div>
+        <ThemeToggle className="btn ghost theme-toggle" />
         <button className="btn ghost" onClick={onLogout}>Déconnexion</button>
       </header>
 
