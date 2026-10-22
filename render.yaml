@@ -1,0 +1,24 @@
+# Render → New + → Blueprint → choisis ton dépôt GitHub. Seules TURSO_DATABASE_URL et TURSO_AUTH_TOKEN sont à saisir.
+services:
+  - type: web
+    name: rami
+    runtime: node
+    region: frankfurt          # la plus proche de Madagascar parmi les régions Render (avec Singapore)
+    plan: starter              # le plan « free » s'endort après 15 min : les parties en cours s'arrêteraient
+    autoDeploy: true
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_ENV
+        value: production
+      - key: FEE_BPS             # commission en points de base : 350 = 3,5 % du gain net du gagnant
+        value: "350"
+      - key: ADMIN_KEY           # clé pour consulter tes revenus : GET /api/admin/fees avec l'en-tête x-admin-key
+        generateValue: true
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
