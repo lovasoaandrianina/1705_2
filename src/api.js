@@ -6,14 +6,23 @@ export const setToken = (t) => (t ? localStorage.setItem(KEY, t) : localStorage.
 
 async function call(path, method = "GET", body) {
   const token = getToken();
-  const res = await fetch(BASE + path, {
-    method,
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(BASE + path, {
+      method,
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    const e = new Error("Connexion impossible : vérifie ton réseau (ou patiente, le serveur se réveille peut-être)");
+    e.network = true; throw e;
+  }
   const data = await res.json().catch(() => null);
-  if (!res.ok)
-    throw new Error(data?.error || (res.status >= 500 ? "API injoignable : lance le serveur (npm run dev:server)" : "Erreur réseau"));
+  if (!res.ok) {
+    // 502 / 503 / 504 : le serveur gratuit se réveille après une période d'inactivité
+    const e = new Error(data?.error || (res.status >= 500 ? "Le serveur se réveille (offre gratuite) : réessaie dans 30 à 60 secondes" : "Erreur réseau"));
+    e.status = res.status; throw e;
+  }
   return data;
 }
 

@@ -1,10 +1,11 @@
 # Render → New + → Blueprint → choisis ton dépôt GitHub. Seules TURSO_DATABASE_URL et TURSO_AUTH_TOKEN sont à saisir.
+# Configuration GRATUITE (quelques amis). Plus tard, pour du vrai public : plan: starter (7 $/mois, ne s'endort jamais).
 services:
   - type: web
     name: rami
     runtime: node
-    region: frankfurt          # la plus proche de Madagascar parmi les régions Render (avec Singapore)
-    plan: starter              # le plan « free » s'endort après 15 min : les parties en cours s'arrêteraient
+    region: frankfurt          # région européenne ; à choisir proche de la base Turso (Irlande)
+    plan: free                 # gratuit : s'endort après 15 min sans visite (réveil ~1 min), 750 h/mois
     autoDeploy: true
     buildCommand: npm install && npm run build
     startCommand: npm start

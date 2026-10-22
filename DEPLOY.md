@@ -1,4 +1,16 @@
-# Mise en ligne sur Render (le site ET l'API sur un seul service)
+# Mise en ligne GRATUITE sur Render + Turso (quelques amis)
+
+Checklist rapide (≈ 15 min) :
+1. **Turso** (compte gratuit, sans carte) : `turso db create rami --location aws-eu-west-1`, puis `turso db show rami --url` et `turso db tokens create rami`. L'offre gratuite donne 500 M de lectures et 10 M d'écritures par mois : très au-delà de 3 joueurs.
+2. **GitHub** : crée un dépôt privé et envoie ce dossier (le fichier `.gitignore` exclut `node_modules`, `dist`, `.env` et `local.db` : ne les envoie surtout pas).
+3. **Render** : New + → Blueprint → ton dépôt → colle `TURSO_DATABASE_URL` et `TURSO_AUTH_TOKEN` → Deploy. Le premier déploiement prend quelques minutes.
+4. **Ta clé admin** : Render → ton service → Environment → `ADMIN_KEY` (générée automatiquement). Elle sert à consulter les commissions : `GET /api/admin/fees` avec l'en-tête `x-admin-key`.
+5. **Évite le réveil lent** (facultatif, gratuit) : crée un moniteur sur UptimeRobot qui appelle `https://<ton-service>.onrender.com/api/health` toutes les 5 minutes. Le service reste éveillé en permanence et reste dans les 750 h gratuites du mois.
+6. **Teste à 3** : inscris-toi, dépose, crée une table, invite deux amis avec le lien.
+
+Ce qui change avec l'offre gratuite : réveil d'environ une minute après une longue pause, parties et chats en cours coupés si Render redémarre le service (les parties sont sauvegardées et reprennent, les chats sont vidés), et tu évites de déployer pendant qu'on joue.
+
+---
 
 ## 1. Turso
 ```
@@ -16,7 +28,7 @@ turso db tokens create rami       # → TURSO_AUTH_TOKEN
 Sans Blueprint (service créé à la main) : Build `npm install && npm run build`, Start `npm start`, Health check `/api/health`,
 variables `NODE_ENV=production`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`.
 
-- Garde le plan **Starter** (ou plus) : le plan gratuit s'endort après 15 min d'inactivité, ce qui bloque les parties en cours.
+- **Offre gratuite (config actuelle de `render.yaml`)** : parfaite pour quelques amis. Le service s'endort après 15 min sans visite et se réveille en ~1 min à la visite suivante (l'écran affiche « Le serveur se réveille… », personne n'est déconnecté). Tant que des joueurs jouent, il reste éveillé. Pour l'ouvrir à du vrai public : `plan: starter` (7 $/mois, ne dort jamais).
 - Reste sur **une seule instance** : les parties en cours et le chronomètre des tours vivent dans le processus
   (elles sont sauvegardées dans Turso et reprennent après un redémarrage).
 - Pas de `CORS_ORIGIN` ni de `VITE_API_URL` à régler : le site et l'API ont la même adresse.

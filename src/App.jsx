@@ -22,6 +22,7 @@ if (invitedPoker) { sessionStorage.setItem("invitePoker", invitedPoker); window.
 export default function App() {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(!getToken());
+  const [waking, setWaking] = useState(false); // serveur gratuit en cours de réveil
   const [screen, setScreen] = useState("dashboard"); // dashboard | rami-menu | rami-free | rami-lobby | invite | table
   const [tableId, setTableId] = useState(null);
   const [pokerId, setPokerId] = useState(null);
@@ -29,8 +30,16 @@ export default function App() {
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
-    if (!getToken()) return;
-    api.me().then(setUser).catch(() => setToken(null)).finally(() => setReady(true));
+    if (!getToken()) return undefined;
+    let alive = true, tries = 0, timer;
+    const boot = () => api.me().then((u) => { if (alive) { setUser(u); setWaking(false); setReady(true); } }).catch((e) => {
+      if (!alive) return;
+      if (e.status === 401) { setToken(null); setReady(true); }                       // jeton vraiment invalide : retour à la connexion
+      else if (tries++ < 45) { setWaking(true); timer = setTimeout(boot, 2500); }     // serveur qui dort / réseau coupé : on ne déconnecte pas, on réessaie
+      else setReady(true);
+    });
+    boot();
+    return () => { alive = false; clearTimeout(timer); };
   }, []);
   // une fois connecté : ouvrir l'invitation reçue, et retrouver ma liste d'attente éventuelle
   useEffect(() => {
@@ -65,7 +74,7 @@ export default function App() {
   };
   const open = (id) => { sessionStorage.removeItem("invite"); setTableId(id); setScreen("table"); };
 
-  if (!ready) return <div className="shell center">Chargement…</div>;
+  if (!ready) return <div className="shell center">{waking ? "Le serveur se réveille… (jusqu'à une minute après une période d'inactivité)" : "Chargement…"}</div>;
   if (!user) return <AuthPage onAuth={onAuth} />;
 
   let view;

@@ -26,6 +26,7 @@ export default function ChatDock({ kind, id, me, enabled = true }) {
   const [tray, setTray] = useState(false);
   const [closed, setClosed] = useState(false);
   const [err, setErr] = useState("");
+  const [vp, setVp] = useState(null); // zone visible réelle (clavier ouvert sur iPhone)
   const [pos, setPos] = useState(() => { try { return JSON.parse(localStorage.getItem("chat_dock")) || null; } catch { return null; } });
 
   const lastRef = useRef(0), openRef = useRef(false), firstRef = useRef(true), typingUntil = useRef(0);
@@ -74,6 +75,17 @@ export default function ChatDock({ kind, id, me, enabled = true }) {
     const el = listRef.current;
     if (open && el && stick.current) el.scrollTop = el.scrollHeight;
   }, [msgs, open, typing]);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!open || !vv) return undefined;
+    const upd = () => setVp({ bottom: Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)), h: Math.round(vv.height) });
+    upd(); vv.addEventListener("resize", upd); vv.addEventListener("scroll", upd);
+    return () => { vv.removeEventListener("resize", upd); vv.removeEventListener("scroll", upd); setVp(null); };
+  }, [open]);
+  useEffect(() => { // rotation / redimensionnement : la bulle reste à l'écran
+    const fit = () => setPos((p) => (p ? { x: Math.min(Math.max(4, p.x), window.innerWidth - 100), y: Math.min(Math.max(4, p.y), window.innerHeight - 60) } : p));
+    window.addEventListener("resize", fit); return () => window.removeEventListener("resize", fit);
+  }, []);
   useEffect(() => { if (open) { setUnread(0); setToast(null); stick.current = true; } }, [open]);
 
   const send = useCallback(async (e) => {
@@ -103,6 +115,8 @@ export default function ChatDock({ kind, id, me, enabled = true }) {
   if (!enabled || closed) return null;
   const style = pos ? { left: pos.x, top: pos.y, right: "auto" } : undefined;
   const others = online.filter((o) => o.id !== me.id);
+  const leftSide = (pos ? pos.x + 48 : window.innerWidth - 58) < window.innerWidth / 2; // le plateau s'ouvre du côté où il y a de la place
+  const panelStyle = vp && vp.bottom > 0 ? { bottom: vp.bottom, height: Math.max(240, Math.min(600, vp.h - 12)) } : undefined;
 
   return (
     <>
@@ -111,7 +125,7 @@ export default function ChatDock({ kind, id, me, enabled = true }) {
       </div>
 
       {!open && (
-        <div className="cx-dock" style={style} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+        <div className={`cx-dock ${leftSide ? "left" : ""}`} style={style} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
           {toast && (
             <button className="cx-toast" key={toast.key} onClick={tap(() => setOpen(true))}>
               <Avatar name={toast.name} size={22} /><span><b>{toast.name}</b> {toast.text}</span>
@@ -133,7 +147,7 @@ export default function ChatDock({ kind, id, me, enabled = true }) {
       {open && (
         <>
           <div className="cx-back" onClick={() => setOpen(false)} />
-          <section className="cx-panel" role="dialog" aria-label="Chat de la table">
+          <section className="cx-panel" role="dialog" aria-label="Chat de la table" style={panelStyle}>
             <div className="cx-grip" />
             <header>
               <div>
