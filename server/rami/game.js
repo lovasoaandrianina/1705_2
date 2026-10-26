@@ -8,16 +8,16 @@ const int = (v) => (Number.isInteger(Number(v)) ? Number(v) : NaN);
 export function parseConfig(b) {
   const stake = int(b.stake), maxPlayers = int(b.maxPlayers);
   if (!(stake >= MIN_STAKE && stake <= MAX_STAKE)) throw bad(`Mise : entre ${MIN_STAKE} et ${MAX_STAKE} Ar`);
-  if (!(maxPlayers >= 3 && maxPlayers <= 5)) throw bad("Une table accueille 3 à 5 joueurs");
+  if (!(maxPlayers >= 2 && maxPlayers <= 5)) throw bad("Une table accueille 2 à 5 joueurs");
   const ru = b.rules || {}, op = b.options || {};
   const bonus = (o, name) => {
     const on = !!(o && o.on), amount = on ? int(o.amount) : 0;
     if (on && !(amount >= 1)) throw bad(`${name} : montant invalide`);
     return { on, amount };
   };
-  const options = { x2: !!op.x2, carre: bonus(op.carre, "Carré"), ten: bonus(op.ten, "10 cartes") };
+  const options = { x2: !!op.x2, carre: bonus(op.carre, "Carré"), ten: bonus(op.ten, "10 cartes"), prime: bonus(op.prime, "Prime") };
   const cap = stake * (maxPlayers - 1); // pot d'une table pleine moins une mise : le gagnant garde au moins sa mise
-  if (options.carre.amount + options.ten.amount > cap) throw bad(`Les primes ne peuvent pas dépasser ${cap} Ar au total`);
+  if (options.carre.amount + options.ten.amount + options.prime.amount > cap) throw bad(`Les primes ne peuvent pas dépasser ${cap} Ar au total`);
   return { stake, maxPlayers, config: { rules: { needSet: !!ru.needSet, needRun: !!ru.needRun, joker: !!ru.joker }, options } };
 }
 
@@ -28,7 +28,7 @@ export function act(g, seat, a, cfg) {
   else if (a.type === "discard") E.discard(g, seat, Number(a.cardId));
   else if (a.type === "rami") E.rami(g, seat, cfg);
   else if (a.type === "undo") E.undo(g, seat);
-  else if (a.type === "claim") E.claim(g, seat, a.kind === "ten" ? "ten" : "carre");
+  else if (a.type === "claim") E.claim(g, seat, a.kind === "ten" ? "ten" : a.kind === "prime" ? "prime" : "carre");
   else throw bad("Action inconnue");
 }
 
@@ -43,7 +43,7 @@ export function plan(t, g, locked) {
   const pot = locked.reduce((s, x) => s + x, 0), o = t.config.options;
   let rest = pot;
   const bonus = [];
-  for (const [key, label] of [["carre", "Carré"], ["ten", "10 cartes"]]) {
+  for (const [key, label] of [["carre", "Carré"], ["ten", "10 cartes"], ["prime", "Prime"]]) {
     const seat = g.claims?.[key];
     if (seat === null || seat === undefined || !o[key]?.on) continue;
     const amount = Math.min(o[key].amount, Math.max(0, rest - t.stake));

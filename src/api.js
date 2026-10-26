@@ -31,9 +31,13 @@ export const api = {
   login: (b) => call("/auth/login", "POST", b),
   me: () => call("/auth/me"),
   logout: () => call("/auth/logout", "POST"),
+  updateProfile: (b) => call("/auth/profile", "POST", b),
   wallet: () => call("/wallet"),
-  deposit: (amount) => call("/wallet/deposit", "POST", { amount }),
-  withdraw: (amount, pin) => call("/wallet/withdraw", "POST", { amount, pin }),
+  walletInfo: () => call("/wallet/info"),
+  myRequests: () => call("/wallet/requests"),
+  deposit: (b) => call("/wallet/deposit", "POST", b),      // demande de dépôt : validée à la main par l'administrateur
+  withdraw: (b) => call("/wallet/withdraw", "POST", b),    // demande de retrait : jetons retirés du solde tout de suite
+  cancelRequest: (id) => call(`/wallet/requests/${id}/cancel`, "POST"),
   tables: (game = "rami") => call(`/tables?game=${encodeURIComponent(game)}`),
   createTable: (b) => call("/tables", "POST", b),
   table: (id) => call(`/tables/${id}`),

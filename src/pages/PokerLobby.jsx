@@ -3,7 +3,7 @@ import { api } from "../api";
 import { fmt } from "../config";
 import PokerBuyIn from "../components/PokerBuyIn";
 
-const DEF = { tables: [], mine: null, feeBps: 350, minBuy: 2000, maxBuy: 20000 };
+const DEF = { tables: [], mine: null, feeBps: 350, minBuy: 2000, maxBuy: null };
 
 export default function PokerLobby({ user, onOpen, onBack }) {
   const [d, setD] = useState(DEF);
@@ -21,7 +21,7 @@ export default function PokerLobby({ user, onOpen, onBack }) {
       <h1>Poker entre amis</h1>
       <p className="sub">
         Texas Hold'em No-Limit · cash game · de 2 à 9 joueurs par table<br />
-        Ton solde : <b>{fmt(user.balance)}</b> · buy-in fixé par le créateur ({fmt(d.minBuy)} à {fmt(d.maxBuy)})
+        Ton solde : <b>{fmt(user.balance)}</b> · buy-in fixé par le créateur (min {fmt(d.minBuy)}, sans plafond)
       </p>
 
       {d.mine && (

@@ -39,6 +39,7 @@ export const requireAuth = wrap(async (req, res, next) => {
     args: [sha(token)],
   });
   if (!r.rows[0]) return res.status(401).json({ error: "Session expirée, reconnecte-toi" });
+  if (Number(r.rows[0].blocked)) return res.status(403).json({ error: "Compte suspendu : contacte l'administrateur" });
   req.user = r.rows[0];
   req.token = token;
   next();
@@ -84,6 +85,7 @@ r.post("/login", wrap(async (req, res) => {
     addFail(key);
     return res.status(401).json({ error: "Téléphone ou PIN incorrect" });
   }
+  if (Number(u.blocked)) return res.status(403).json({ error: "Compte suspendu : contacte l'administrateur" });
   res.json({ token: await newSession(u.id), user: publicUser(u) });
 }));
 
@@ -92,6 +94,47 @@ r.get("/me", requireAuth, (req, res) => res.json(publicUser(req.user)));
 r.post("/logout", requireAuth, wrap(async (req, res) => {
   await db.execute({ sql: "DELETE FROM sessions WHERE token_hash = ?", args: [sha(req.token)] });
   res.json({ ok: true });
+}));
+
+// Mise à jour du profil (pseudo, téléphone, avatar, PIN)
+r.post("/profile", requireAuth, wrap(async (req, res) => {
+  const uid = Number(req.user.id);
+  const pseudo = req.body.pseudo !== undefined ? String(req.body.pseudo || "").trim() : null;
+  const phone = req.body.phone !== undefined ? normPhone(req.body.phone) : undefined;
+  const avatar = req.body.avatar !== undefined ? req.body.avatar : undefined;
+  const pin = req.body.pin !== undefined ? String(req.body.pin || "") : undefined;
+  const currentPin = req.body.currentPin !== undefined ? String(req.body.currentPin || "") : "";
+
+  if (pseudo !== null && !/^[\w.-]{3,16}$/.test(pseudo))
+    return res.status(400).json({ error: "Pseudo : 3 à 16 caractères (lettres, chiffres, _ . -)" });
+  if (req.body.phone !== undefined && !phone)
+    return res.status(400).json({ error: "Numéro de téléphone invalide" });
+  if (avatar !== undefined && avatar !== null && (!/^data:image\/(jpeg|png|webp);base64,/.test(avatar) || avatar.length > 200_000))
+    return res.status(400).json({ error: "Photo invalide ou trop lourde" });
+  if (pin !== undefined && pin !== "" && !/^\d{4,6}$/.test(pin))
+    return res.status(400).json({ error: "Le nouveau PIN doit contenir 4 à 6 chiffres" });
+
+  // Changer téléphone ou PIN : vérifier le PIN actuel
+  if ((phone && phone !== req.user.phone) || (pin && pin !== "")) {
+    if (!checkPin(currentPin, req.user.pin_hash))
+      return res.status(401).json({ error: "PIN actuel incorrect" });
+  }
+
+  const sets = [], args = [];
+  if (pseudo !== null) { sets.push("pseudo = ?"); args.push(pseudo); }
+  if (phone) { sets.push("phone = ?"); args.push(phone); }
+  if (avatar !== undefined) { sets.push("avatar = ?"); args.push(avatar); }
+  if (pin && pin !== "") { sets.push("pin_hash = ?"); args.push(hashPin(pin)); }
+  if (!sets.length) return res.status(400).json({ error: "Rien à modifier" });
+  args.push(uid);
+  try {
+    await db.execute({ sql: `UPDATE users SET ${sets.join(", ")} WHERE id = ?`, args });
+  } catch (e) {
+    if (String(e.message).includes("UNIQUE")) return res.status(409).json({ error: "Pseudo ou numéro déjà utilisé" });
+    throw e;
+  }
+  const u = (await db.execute({ sql: "SELECT * FROM users WHERE id = ?", args: [uid] })).rows[0];
+  res.json({ user: publicUser(u) });
 }));
 
 export default r;

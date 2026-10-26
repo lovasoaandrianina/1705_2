@@ -17,8 +17,10 @@ services:
         value: production
       - key: FEE_BPS             # commission en points de base : 350 = 3,5 % du gain net du gagnant
         value: "350"
-      - key: ADMIN_KEY           # clé pour consulter tes revenus : GET /api/admin/fees avec l'en-tête x-admin-key
+      - key: ADMIN_KEY           # clé de connexion au back office : https://ton-site/admin (et GET /api/admin/fees avec l'en-tête x-admin-key)
         generateValue: true
+      - key: VAPID_SUBJECT       # notifications du back office : mets ton vrai e-mail, ex. mailto:toi@exemple.com (exigé par Apple)
+        value: "mailto:admin@example.com"
       - key: TURSO_DATABASE_URL
         sync: false
       - key: TURSO_AUTH_TOKEN

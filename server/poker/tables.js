@@ -127,7 +127,7 @@ export async function startPokerSweeper() {
 
 const parseBuy = (v) => {
   const n = Number(v);
-  if (!Number.isInteger(n) || n < E.MIN_BUY || n > E.MAX_BUY) throw bad(`Buy-in : entre ${E.MIN_BUY} et ${E.MAX_BUY} Ar`);
+  if (!Number.isInteger(n) || n < E.MIN_BUY) throw bad(`Buy-in minimum : ${E.MIN_BUY} Ar`);
   return n;
 };
 // Blindes et buy-in saisis librement par le créateur
@@ -162,7 +162,7 @@ r.post("/", wrap(async (req, res) => {
   if (await myTable(uid)) throw bad("Tu es déjà assis à une table de poker", 409);
   if ((await balanceOf(uid)) < buy) throw bad("Solde insuffisant pour cet achat de jetons");
   const g = E.newGame(blind[0], blind[1], FEE_BPS, buy);
-  E.seatHuman(g, { userId: uid, name: req.user.pseudo, buy });
+  E.seatHuman(g, { userId: uid, name: req.user.pseudo, avatar: req.user.avatar || null, buy });
   const id = await inTx(async (tx) => {
     const ins = await tx.execute({ sql: "INSERT INTO poker_tables (creator_id, sb, bb, state) VALUES (?, ?, ?, ?)", args: [uid, blind[0], blind[1], JSON.stringify(g)] });
     const tid = Number(ins.lastInsertRowid);
@@ -183,7 +183,7 @@ r.post("/:id/join", wrap(async (req, res) => {
     if (mine) { if (Number(mine.table_id) === id) return; throw bad("Tu es déjà assis à une autre table de poker", 409); }
     if ((await balanceOf(uid)) < buy) throw bad("Solde insuffisant pour cet achat de jetons");
     const g2 = structuredClone(e.g);
-    E.seatHuman(g2, { userId: uid, name: req.user.pseudo, buy }); // place libre, ou erreur « table complète »
+    E.seatHuman(g2, { userId: uid, name: req.user.pseudo, avatar: req.user.avatar || null, buy }); // place libre, ou erreur « table complète »
     await commit(e, g2, async (tx) => {
       await adjust(tx, uid, -buy, "bet", `Poker #${id} : achat de ${buy} Ar de jetons`);
       await tx.execute({ sql: "INSERT INTO poker_players (user_id, table_id) VALUES (?, ?)", args: [uid, id] });
@@ -232,7 +232,7 @@ r.post("/:id/rebuy", wrap(async (req, res) => {
     const s = e.g.seats[me], have = s.stack + s.pendingAdd;
     if (s.leaving) throw bad("Tu quittes la table");
     if (!Number.isInteger(amount) || amount < (have === 0 ? e.g.buyIn : TOPUP_MIN)) throw bad(`Recharge minimum : ${have === 0 ? e.g.buyIn : TOPUP_MIN} Ar`);
-    if (have + amount > E.MAX_BUY) throw bad(`Ton tapis ne peut pas dépasser ${E.MAX_BUY} Ar (tu peux recharger ${Math.max(0, E.MAX_BUY - have)} Ar au maximum)`);
+    /* pas de plafond de buy-in / recharge */
     if ((await balanceOf(uid)) < amount) throw bad("Solde insuffisant");
     const g2 = structuredClone(e.g);
     E.addChips(g2, me, amount);

@@ -32,10 +32,10 @@ async function loadTable(id, c = db) {
 }
 async function players(id, c = db) {
   const r = await c.execute({
-    sql: "SELECT tp.user_id, tp.locked, u.pseudo FROM table_players tp JOIN users u ON u.id = tp.user_id WHERE tp.table_id = ? ORDER BY tp.rowid",
+    sql: "SELECT tp.user_id, tp.locked, u.pseudo, u.avatar FROM table_players tp JOIN users u ON u.id = tp.user_id WHERE tp.table_id = ? ORDER BY tp.rowid",
     args: [id],
   });
-  return r.rows.map((p) => ({ user_id: Number(p.user_id), locked: Number(p.locked), pseudo: p.pseudo }));
+  return r.rows.map((p) => ({ user_id: Number(p.user_id), locked: Number(p.locked), pseudo: p.pseudo, avatar: p.avatar || null }));
 }
 const myActive = async (uid, c = db) =>
   (await c.execute({
@@ -178,7 +178,7 @@ const fullView = (t, g, uid, ps) => ({
   id: t.id, kind: t.game, status: t.status, stake: t.stake, maxPlayers: t.max_players, config: t.config,
   creatorId: t.creator_id, escrow: t.stake, pot: ps.reduce((s, p) => s + p.locked, 0), feeBps: FEE_BPS,
   players: ps.map((p) => ({ userId: p.user_id, pseudo: p.pseudo })),
-  game: g ? GAMES[t.game].view(g, g.seats.indexOf(uid), g.seats.map((id) => ps.find((p) => p.user_id === id)?.pseudo || "?")) : null,
+  game: g ? GAMES[t.game].view(g, g.seats.indexOf(uid), g.seats.map((id) => ps.find((p) => p.user_id === id)?.pseudo || "?"), g.seats.map((id) => ps.find((p) => p.user_id === id)?.avatar || null)) : null,
 });
 
 /* ── Routes ── */
@@ -273,7 +273,8 @@ r.post("/:id/start", wrap(async (req, res) => {
     if (t.creator_id !== req.user.id) throw bad("Seul le créateur lance la partie", 403);
     if (t.status !== "waiting") throw bad("Partie déjà lancée");
     const ps = await players(id, tx);
-    if (ps.length < 3) throw bad(t.game === "domino" ? "Le Domino se joue à 3 joueurs : il en faut 3" : "Il faut au moins 3 joueurs");
+    const need = Number(t.max_players) || (t.game === "domino" ? 3 : 3);
+    if (ps.length < need) throw bad(t.game === "domino" ? `Le Domino se joue à ${need} joueurs : il en faut ${need}` : `Il faut au moins ${need} joueurs`);
     const g = GAMES[t.game].newGame(E.shuffle(ps.map((p) => p.user_id)), t.config); // places tirées au hasard
     await tx.execute({ sql: "UPDATE game_tables SET status = 'playing', state = ? WHERE id = ?", args: [JSON.stringify(g), id] });
     await tx.execute({ sql: "DELETE FROM table_waitlist WHERE table_id = ?", args: [id] });

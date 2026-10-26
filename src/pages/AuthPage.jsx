@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../api";
 import Avatar from "../components/Avatar";
 import ThemeToggle from "../components/ThemeToggle";
+import BrandLogo from "../components/BrandLogo";
 
 // Réduit la photo à 128×128 (carré) pour qu'elle reste légère dans Turso
 const resize = (file) => new Promise((ok, ko) => {
@@ -43,11 +44,11 @@ export default function AuthPage({ onAuth }) {
 
   return (
     <div className="shell">
-      <div className="auth-top">
-        <h1>Gasyno</h1>
-        <ThemeToggle className="btn ghost theme-toggle" />
+      <div className="brand-top">
+        <BrandLogo className="brand-logo" />
+        <ThemeToggle className="btn ghost theme-toggle brand-theme" />
       </div>
-      <p className="sub">Domino, Poker et Rami entre amis - Gagnez dès maintenant</p>
+      <p className="sub brand-tag">Jeux, ambiances et bons moments</p>
       <div className="tabs">
         <button type="button" className={`btn ${mode === "login" ? "on" : ""}`} onClick={() => setMode("login")}>Connexion</button>
         <button type="button" className={`btn ${mode === "register" ? "on" : ""}`} onClick={() => setMode("register")}>Inscription</button>

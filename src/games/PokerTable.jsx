@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import Avatar from "../components/Avatar";
 import { api } from "../api";
 import { fmt } from "../config";
 import SoundToggle from "../components/SoundToggle";
@@ -93,6 +94,7 @@ export default function PokerTable({ id, user, setUser, onExit }) {
   useWatch(v?.handNo, (n, p) => { if (readyRef.current && p !== undefined) play("deal"); });
   useWatch(!!v?.legal, (n) => readyRef.current && n && play("turn"));
   useWatch(!!v?.sd, (n) => readyRef.current && n && play("riser", 1.8));
+  useWatch(!!v?.reveal, (n) => { if (readyRef.current && n) { play("allin"); setTimeout(() => play("flip"), 350); } });
   useWatch(v && v.phase === "between" && v.last ? v.last.n : 0, (n) => {
     if (!readyRef.current || !n) return;
     play(v.last.winners.some((w) => w.seat === v.me) ? "win" : "pot");
@@ -134,6 +136,9 @@ export default function PokerTable({ id, user, setUser, onExit }) {
   const myTurn = !!L && !busy;
   const mySeat = seated ? v.seats[me] : null;
   const curBet = L && mySeat ? mySeat.bet + L.toCall : 0;
+  const myBet = mySeat ? mySeat.bet : 0;                  // déjà misé sur ce tour
+  const added = (to) => Math.max(0, to - myBet);          // jetons réellement sortis de mon tapis pour atteindre « to »
+  const wasRevealed = v.reveal || v.revealedLast;         // cartes déjà retournées pendant le tapis : pas de seconde animation
   const count = v.seats.filter((s) => !s.empty).length;
   const link = `${window.location.origin}/?poker=${id}`;
   const copy = async () => { try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2500); } catch { /* copie manuelle */ } };
@@ -161,21 +166,21 @@ export default function PokerTable({ id, user, setUser, onExit }) {
   };
 
   const msg = note
-    || (!seated ? "Tu seras assis à la prochaine main…"
-    : mine.leaving ? "Tu quittes la table…"
-    : mine.busted ? "Tu n'as plus de jetons : recharge pour continuer"
-    : count < 2 ? "En attente d'autres joueurs : partage le lien d'invitation"
-    : v.phase === "between" ? (v.last ? "" : "Prochaine main…")
-    : v.sd ? "Les mains vont être dévoilées…"
-    : v.runout ? (v.street === "flop" ? "Le flop…" : v.street === "turn" ? "La turn…" : v.street === "river" ? "La river…" : "")
-    : myTurn ? `À toi de jouer · ${Math.ceil(left / 1000)} s`
-    : v.toAct >= 0 ? `Tour de ${v.seats[v.toAct].name} · ${Math.ceil(left / 1000)} s` : "");
+    || (!seated ? "Prochaine main…"
+    : mine.leaving ? "Départ…"
+    : mine.busted ? "Sans jetons"
+    : count < 2 ? "En attente de joueurs"
+    : v.phase === "between" ? ""
+    : v.sd ? (v.reveal ? "" : "…")
+    : v.runout ? ""
+    : myTurn ? `${Math.ceil(left / 1000)} s`
+    : v.toAct >= 0 ? `${v.seats[v.toAct].name} · ${Math.ceil(left / 1000)} s` : "");
 
   return (
     <div className="pk-app">
       <div className="pk-top">
         <button className="pk-link" onClick={() => (seated ? quit() : onExit())}>← Quitter</button>
-        <span>Blindes {num(v.sb)}/{num(v.bb)} · main #{v.handNo}</span>
+        <span>{num(v.sb)}/{num(v.bb)} · #{v.handNo}</span>
         <span><SoundToggle className="pk-link" style={{ textDecoration: "none" }} /> · <button className="pk-link" onClick={() => setSheet("invite")}>Inviter</button> · <button className="pk-link" onClick={() => setSheet("rules")}>Règles</button></span>
       </div>
 
@@ -194,7 +199,7 @@ export default function PokerTable({ id, user, setUser, onExit }) {
               {winners.some((w) => w.fee) && <small className="pk-fee">commission −{num(winners.reduce((a, w) => a + (w.fee || 0), 0))}</small>}
             </div>
           )}
-          {v.phase === "between" && <small className="pk-next">Prochaine main dans {Math.ceil(Math.max(0, v.nextMs - (now - v.fetchedAt)) / 1000)} s</small>}
+          {v.phase === "between" && <small className="pk-next">{Math.ceil(Math.max(0, v.nextMs - (now - v.fetchedAt)) / 1000)} s</small>}
         </div>
 
         {v.seats.map((s) => {
@@ -205,7 +210,11 @@ export default function PokerTable({ id, user, setUser, onExit }) {
           return (
             <div key={s.i}>
               <div className={`pk-seat ${isMe ? "me" : ""} ${turn ? "turn" : ""} ${s.folded ? "fold" : ""} ${isWinner(s.i) ? "won" : ""}`} style={{ left: `${p.x}%`, top: `${p.y}%` }}>
-                {showCards && <div className="pk-hole">{s.cards.map((c, k) => <Card key={`${v.handNo}-${k}`} c={c} size="xs" flip={v.phase === "between" && c !== null} delay={0.3 + k * 0.4} />)}</div>}
+                {showCards && (() => {
+                  const shownFace = s.cards.some((c) => c !== null);
+                  return <div className={`pk-hole ${shownFace ? "open" : ""}`}>{s.cards.map((c, k) => <Card key={`${v.handNo}-${k}-${c === null ? "b" : "f"}`} c={c} size={shownFace ? "sm" : "xs"} flip={c !== null && !(wasRevealed && v.phase === "between")} delay={0.2 + k * 0.35} />)}</div>;
+                })()}
+                <div className="pk-av"><Avatar user={{ pseudo: s.name, avatar: s.avatar }} /></div>
                 <b>{isMe ? "Moi" : s.name}</b>
                 <span>{num(s.stack)}</span>
                 {s.handName && <small className="hn">{s.handName}</small>}
@@ -230,12 +239,7 @@ export default function PokerTable({ id, user, setUser, onExit }) {
         </div>
         <div className="pk-mine">
           {v.myHand && !v.runout && <b>{v.myHand}</b>}
-          {seated && (
-            <small>
-              Mes jetons : {fmt(total)}{mine.pendingAdd ? ` (dont ${fmt(mine.pendingAdd)} dès la prochaine main)` : ""}
-              {" · "}Compte : {fmt(wallet ?? user.balance)}
-            </small>
-          )}
+          {seated && <small>{fmt(total)}{mine.pendingAdd ? ` (+${fmt(mine.pendingAdd)})` : ""}</small>}
         </div>
       </div>
 
@@ -247,7 +251,7 @@ export default function PokerTable({ id, user, setUser, onExit }) {
           </button>
           {L.canRaise && (
             <button className="gold" onClick={() => act({ type: "raise", to: raise })}>
-              {raise >= L.maxTo ? `Tapis ${num(L.maxTo)}` : `${curBet === 0 ? "Miser" : "Relancer à"} ${num(raise)}`}
+              {raise >= L.maxTo ? `Tapis ${num(added(L.maxTo))}` : `${curBet === 0 ? "Miser" : "Relancer à"} ${num(raise)}`}
             </button>
           )}
         </div>
@@ -256,8 +260,8 @@ export default function PokerTable({ id, user, setUser, onExit }) {
         <div className="pk-size">
           <input type="range" min={L.minTo} max={L.maxTo} step={Math.max(1, v.sb)} value={clamp(raise, L.minTo, L.maxTo)} onChange={(e) => setRaise(Number(e.target.value))} />
           <div>
-            <button onClick={() => sized(0.5)}>½ pot</button>
-            <button onClick={() => sized(0.75)}>¾ pot</button>
+            <button onClick={() => sized(0.5)}>½</button>
+            <button onClick={() => sized(0.75)}>¾</button>
             <button onClick={() => sized(1)}>Pot</button>
             <button onClick={() => setRaise(L.maxTo)}>Tapis</button>
           </div>
@@ -267,8 +271,8 @@ export default function PokerTable({ id, user, setUser, onExit }) {
 
       {seated && !mine.leaving && (
         <div className="pk-foot">
-          {total < v.maxBuy && (!mine.busted || v.buyIn <= v.maxBuy) && <button onClick={() => { refreshWallet(); setAdd(mine.busted ? v.buyIn : Math.min(2000, v.maxBuy - total)); setSheet("rebuy"); }}>{mine.busted ? "Racheter des jetons" : "Recharger"}</button>}
-          <button className={canLeave ? "" : "dim"} onClick={quit}>{canLeave ? "Quitter et encaisser" : `Quitter : bouton D dans ${v.leave.in} main${v.leave.in > 1 ? "s" : ""}`}</button>
+          {seated && <button onClick={() => { refreshWallet(); setAdd(mine.busted ? v.buyIn : 2000); setSheet("rebuy"); }}>{mine.busted ? "Racheter" : "Recharger"}</button>}
+          <button className={canLeave ? "" : "dim"} onClick={quit}>{canLeave ? "Quitter" : `D dans ${v.leave.in}`}</button>
         </div>
       )}
       {!seated && <div className="pk-foot"><button onClick={quit}>Annuler et me faire rembourser</button></div>}
@@ -281,7 +285,7 @@ export default function PokerTable({ id, user, setUser, onExit }) {
             <h3>Règles de la table</h3>
             <p>Texas Hold'em No-Limit, cash game, de 2 à 9 joueurs (la main démarre dès que deux joueurs sont assis). Chacun reçoit 2 cartes, 5 cartes communes sont dévoilées (flop, turn, river). Le meilleur jeu de 5 cartes gagne le pot ; les pots annexes gèrent les joueurs à tapis.</p>
             <p>Blindes {num(v.sb)} / {num(v.bb)}. Relance minimum = la dernière relance (au moins la grosse blinde). Tu as {v.turnMs / 1000} s par décision ; deux tours sans réponse et tu es retiré de la table (tes jetons te sont rendus). Tu ne peux quitter la table que lorsque le bouton dealer (D) est sur toi.</p>
-            <p>Buy-in de la table : {fmt(v.buyIn)}, le même pour tous. Si tu n'as plus de jetons, tu peux racheter le buy-in ; ton tapis ne peut pas dépasser {fmt(v.maxBuy)}.</p>
+            <p>Buy-in de la table : {fmt(v.buyIn)}, le même pour tous. Si tu n'as plus de jetons, tu peux racheter le buy-in (sans plafond de tapis).</p>
             <button className="gold" onClick={() => setSheet(null)}>Fermer</button>
           </div>
         </div>
@@ -306,8 +310,8 @@ export default function PokerTable({ id, user, setUser, onExit }) {
               <p>Rachat du buy-in de la table : <b>{fmt(v.buyIn)}</b>. Solde compte (après défaite) : <b>{fmt(wallet ?? user.balance)}</b>.</p>
             ) : (
               <>
-                <p>Tu as {fmt(total)}. Maximum à table : {fmt(v.maxBuy)} (recharge possible : {fmt(v.maxBuy - total)}). Solde compte : <b>{fmt(wallet ?? user.balance)}</b>.</p>
-                <input className="pk-in" type="number" inputMode="numeric" min="500" max={v.maxBuy - total} step="500" value={add} onChange={(e) => setAdd(e.target.value)} />
+                <p>Tapis : {fmt(total)} · Solde : <b>{fmt(wallet ?? user.balance)}</b></p>
+                <input className="pk-in" type="number" inputMode="numeric" min="500" step="500" value={add} onChange={(e) => setAdd(e.target.value)} />
               </>
             )}
             {note && <p style={{ color: "#ff9d9d" }}>{note}</p>}

@@ -283,14 +283,18 @@ export function Card({ c, sm, sel, className = "", ...rest }) {
   );
 }
 
-export function Opp({ i, name, n, active, dur, tick }) {
+export function Opp({ i, name, n, active, dur, tick, avatar, horizontal = false }) {
   return (
     <div className={`opp ${active ? "turn" : ""}`}>
-      <span className="nm">{name} · {n}</span>
-      <div className="backs">
-        {Array.from({ length: n }).map((_, k) => (
-          <span key={k} className="bk pop"
-            style={{ transform: `rotate(${((k * 37 + i * 11) % 15) - 7}deg) translate(${((k * 13 + i) % 3) - 1}px, ${((k * 7 + i) % 3) - 1}px)` }} />
+      <span className="nm">{avatar ? <img className="opp-av" src={avatar} alt="" /> : null}{name} · {n}</span>
+      <div className={`backs ${horizontal ? "backs-horizontal" : ""} ${horizontal ? "backs-445" : ""}`}>
+        {horizontal ? [n >= 1 ? 4 : 0, n >= 5 ? 4 : 0, n >= 9 ? n - 8 : 0].map((count, row) => (
+          count > 0 && <div className="backs-row" key={row}>{Array.from({ length: Math.min(count, 5) }).map((_, j) => {
+            const k = row === 0 ? j : row === 1 ? j + 4 : j + 8;
+            return <span key={k} className="bk pop" style={{ transform: `rotate(${((k * 3 + i * 2) % 7) - 3}deg)` }} />;
+          })}</div>
+        )) : Array.from({ length: n }).map((_, k) => (
+          <span key={k} className="bk pop" style={{ transform: `rotate(${((k * 37 + i * 11) % 15) - 7}deg) translate(${((k * 13 + i) % 3) - 1}px, ${((k * 7 + i) % 3) - 1}px)` }} />
         ))}
       </div>
       {active && dur > 0 && <span className="prog" key={tick} style={{ animationDuration: `${dur}ms` }} />}
@@ -536,11 +540,17 @@ html,body,#root{margin:0;height:100%;background:#052a18}
 .left,.right{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:6px 0}
 .table{position:relative;min-height:0}
 
+.opp-av{width:18px;height:18px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:4px;border:1px solid #fff5}
 .opp{display:flex;flex-direction:column;align-items:center;gap:4px;padding:5px 4px;border-radius:8px;border:1px solid transparent}
 .opp.turn{border-color:#ffd54a;background:#ffd54a22;box-shadow:0 0 10px #ffd54a66}
 .nm{font-size:10px;font-weight:600;white-space:nowrap}
 .backs{display:flex;flex-wrap:wrap;gap:2px;justify-content:center;max-width:52px;min-height:11px}
 .top .backs{max-width:96px}
+.backs-horizontal{display:flex;flex-direction:column;flex-wrap:nowrap;align-items:center;max-width:none;min-height:0;gap:2px}
+.backs-row{display:flex;justify-content:center;gap:2px;height:13px}
+.backs-horizontal .bk{flex:0 0 11px;width:11px;height:13px}
+.backs-445 .bk{border-radius:3px}
+@media(max-width:480px){.top .backs-horizontal{max-width:none}.opp:has(.backs-horizontal){padding:3px 2px;gap:3px}.backs-row{height:11px;gap:1px}.backs-horizontal .bk{width:9px;height:11px;flex-basis:9px}}
 .prog{display:block;width:100%;height:3px;background:#ffd54a;border-radius:2px;transform-origin:left;animation:fill linear forwards}
 @keyframes fill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 .bk{display:block;width:11px;height:11px;border-radius:2px;border:1px solid #ffffffaa;box-sizing:border-box;
@@ -593,6 +603,9 @@ button.go{background:#ffd54a;color:#2b2200;border-color:#ffd54a}
 button.big{font-size:20px;padding:12px 44px;letter-spacing:2px}
 .hand{display:flex;flex-wrap:wrap;justify-content:center;align-content:flex-start;gap:5px;padding:12px 8px 18px;min-height:92px;border-top:2px solid transparent}
 .hand{touch-action:none}
+.hand.grouped{gap:10px;row-gap:8px}
+.hand-group{display:flex;gap:4px;padding:0 6px;border-right:1px solid rgba(255,255,255,0.18)}
+.hand-group:last-child{border-right:0}
 .c.jk{background:linear-gradient(135deg,#fffdf6 45%,#ffd95a);box-shadow:0 0 0 1.5px #f2b705,0 1px 3px #0007}
 .jbadge{position:absolute;top:3px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:4px;padding:3px 6px;
   border-radius:8px;background:#00000045;border:1px solid #f2b70599;z-index:5;pointer-events:none;font-size:9px;font-weight:800;color:#ffd54a;letter-spacing:.5px}

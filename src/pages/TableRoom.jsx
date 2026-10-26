@@ -35,7 +35,7 @@ export default function TableRoom({ id, user, onExit }) {
     );
 
   const isCreator = v.creatorId === user.id;
-  const need = kind === "domino" ? 3 : 3;
+  const need = Number(v.maxPlayers) || (kind === "domino" ? 3 : 3);
   const link = `${window.location.origin}/?table=${v.id}`;
   const copy = async () => { try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2500); } catch { /* sélection manuelle */ } };
   const share = () => navigator.share({ title: `${GAME_NAMES[kind]} entre amis`, text: `Rejoins ma table de ${GAME_NAMES[kind]} (#${v.id}) !`, url: link }).catch(() => {});

@@ -8,9 +8,10 @@ export const MIN_STAKE = 1000, MAX_STAKE = 20000; // mêmes limites que le serve
 export const rulesList = (c, game = "rami") => {
   const rules = c?.rules || {};
   if (game === "domino") {
+    const half = Math.floor(Number(c?.target || 100) / 2);
     const labels = [
-      rules.first50 && "50 points sans qu'un autre joueur marque",
-      rules.big50 && "Bonus si une manche rapporte au moins 50 points",
+      rules.first50 && `${half} points sans qu'un autre joueur marque`,
+      rules.big50 && `Manche ≥ ${half} points gagne immédiatement`,
       rules.outDouble6 && "Victoire spéciale en sortant sur le double 6",
     ].filter(Boolean);
     return labels.length ? labels : ["Règles classiques"];
@@ -25,11 +26,15 @@ export const rulesList = (c, game = "rami") => {
 
 /** Liste des options (une entrée = une carte UI). */
 export const optionsList = (c, game = "rami") => {
-  if (game === "domino") return ["Objectif : 100 points"];
+  if (game === "domino") {
+    const target = Number(c?.target || 100);
+    return [`Objectif : ${target} points`];
+  }
   const options = c?.options || {};
   const list = [
     options.x2 && "×2 proposé si le sabot est terminé",
     options.carre?.on && `Carré : ${fmt(options.carre.amount)} au premier (sans joker)`,
+    options.prime?.on && `Prime 7 cartes : ${fmt(options.prime.amount)} au premier (sans joker)`,
     options.ten?.on && `10 cartes : ${fmt(options.ten.amount)} au premier (sans joker)`,
   ].filter(Boolean);
   return list.length ? list : ["Aucune option"];

@@ -10,7 +10,7 @@ const ZONES = {
   top: { x: [25, 75], y: [6, 30] }, topR: { x: [55, 92], y: [6, 30] }, right: { x: [68, 94], y: [30, 70] },
 };
 const START = { bottom: [50, 110], left: [-6, 50], topL: [18, -6], top: [50, -6], topR: [82, -6], right: [106, 50] };
-const SLOTS = { 3: ["bottom", "left", "right"], 4: ["bottom", "left", "top", "right"], 5: ["bottom", "left", "topL", "topR", "right"] };
+const SLOTS = { 2: ["bottom", "top"], 3: ["bottom", "left", "right"], 4: ["bottom", "left", "top", "right"], 5: ["bottom", "left", "topL", "topR", "right"] };
 
 const EXTRA = `.claims{font-size:11px;text-align:center;padding:3px 8px;background:#0000002e;line-height:1.7}
 .pill{display:inline-block;margin-left:6px;padding:1px 9px;border-radius:999px;background:#ffffff22}
@@ -20,8 +20,9 @@ const EXTRA = `.claims{font-size:11px;text-align:center;padding:3px 8px;backgrou
 .recap div{display:flex;justify-content:space-between;gap:16px;padding:2px 0}
 .recap .fee{color:#ffb4b4}
 .recap .tot{border-top:1px solid #fff4;margin-top:4px;padding-top:4px;font-weight:800;color:#ffd54a}
-.claimbar{padding-bottom:0}
-.claimbar button{flex:1;background:#7c3aed;border-color:#c4b5fd;color:#fff;font-size:14px;padding:10px 6px}
+.claimbar{padding:0 10px 2px;gap:5px}
+.claimbar button{flex:1;min-width:0;background:#7c3aed;border-color:#b9a2f5;color:#fff;font-size:10px;line-height:1.1;padding:4px 3px;border-radius:9px;min-height:25px}
+.claimbar button:disabled{opacity:.45}
 .flash{position:absolute;left:50%;top:36%;z-index:250000;display:flex;flex-direction:column;align-items:center;gap:2px;padding:16px 30px;
   border-radius:20px;background:#ffd54a;color:#2b2200;text-align:center;pointer-events:none;box-shadow:0 0 0 5px #fff9,0 12px 44px #000b;
   animation:flash 7s ease forwards}
@@ -31,11 +32,11 @@ const EXTRA = `.claims{font-size:11px;text-align:center;padding:3px 8px;backgrou
 export default function RamiOnline({ view, act, onExit }) {
   const g = view.game, N = g.N, me = g.seat;
   const o = view.config.options, cl = g.claims || {};
-  const prev = useRef({ carre: cl.carre ?? null, ten: cl.ten ?? null });
+  const prev = useRef({ carre: cl.carre ?? null, ten: cl.ten ?? null, prime: cl.prime ?? null });
   const [flash, setFlash] = useState(null); // bannière plein écran quand quelqu'un décroche une prime
   const [showClaim, setShowClaim] = useState(null); // « carre » | « ten » : revoir les cartes d'une prime
   useEffect(() => {
-    for (const [k, label, amt] of [["carre", "CARRÉ", o.carre.amount], ["ten", "10 CARTES", o.ten.amount]]) {
+    for (const [k, label, amt] of [["carre", "CARRÉ", o.carre?.amount], ["ten", "10 CARTES", o.ten?.amount], ["prime", "PRIME", o.prime?.amount]]) {
       const now = cl[k] ?? null;
       if (now !== null && prev.current[k] === null) {
         play("claim");
@@ -159,7 +160,7 @@ export default function RamiOnline({ view, act, onExit }) {
   for (let rel = 1; rel < N; rel++) bySlot[slots[rel]] = rel;
   const opp = (rel) => {
     const s = (me + rel) % N;
-    return <Opp key={s} i={s} name={g.names[s]} n={g.counts[s]} active={live && g.turn === s} dur={g.turnMs} tick={g.turnNo} />;
+    return <Opp key={s} i={s} name={g.names[s]} n={g.counts[s]} active={live && g.turn === s} dur={g.turnMs} tick={g.turnNo} avatar={(g.avatars || [])[s]} horizontal={N === 2} />;
   };
   const drawnCard = g.drawn && byId[g.drawn.id];
 
@@ -207,20 +208,18 @@ export default function RamiOnline({ view, act, onExit }) {
 
       <div className="claims">
         Pot {fmt(view.pot)}
-        {o.carre.on && <span className={`pill ${cl.carre == null ? "" : "got"}`} 
-        // onClick={cl.carre == null ? undefined : () => setShowClaim("carre")}
-        >🏆 Carré : {cl.carre == null ? `libre (${fmt(o.carre.amount)})` : `${g.names[cl.carre]}`}</span>}
-        {o.ten.on && <span className={`pill ${cl.ten == null ? "" : "got"}`} 
-        // onClick={cl.ten == null ? undefined : () => setShowClaim("ten")}
-        >🏆 10 cartes : {cl.ten == null ? `libre (${fmt(o.ten.amount)})` : `${g.names[cl.ten]}`}</span>}
+        {o.carre?.on && <span className={`pill ${cl.carre == null ? "" : "got"}`}>🏆 Carré : {cl.carre == null ? `libre (${fmt(o.carre.amount)})` : `${g.names[cl.carre]}`}</span>}
+        {o.prime?.on && <span className={`pill ${cl.prime == null ? "" : "got"}`}>🏆 7 cartes : {cl.prime == null ? `libre (${fmt(o.prime.amount)})` : `${g.names[cl.prime]}`}</span>}
+        {o.ten?.on && <span className={`pill ${cl.ten == null ? "" : "got"}`}>🏆 10 cartes : {cl.ten == null ? `libre (${fmt(o.ten.amount)})` : `${g.names[cl.ten]}`}</span>}
         <SoundToggle className="pill" style={{ border: 0, color: "#fff", cursor: "pointer" }} />
         {g.vote?.done && <span className="pill">{g.vote.accepted ? "Mise doublée ×2" : "×2 refusé"}</span>}
       </div>
       <div className="msg">{msg}</div>
-      {live && ((o.carre.on && cl.carre == null) || (o.ten.on && cl.ten == null)) && (
+      {live && ((o.carre?.on && cl.carre == null) || (o.prime?.on && cl.prime == null) || (o.ten?.on && cl.ten == null)) && (
         <div className="bar claimbar">
-          {o.carre.on && cl.carre == null && <button onClick={() => run({ type: "claim", kind: "carre" })}>🏆 CARRÉ ({fmt(o.carre.amount)})</button>}
-          {o.ten.on && cl.ten == null && <button onClick={() => run({ type: "claim", kind: "ten" })}>🏆 10 CARTES ({fmt(o.ten.amount)})</button>}
+          {o.carre?.on && cl.carre == null && <button onClick={() => run({ type: "claim", kind: "carre" })}>🏆 Carré ({fmt(o.carre.amount)})</button>}
+          {o.prime?.on && cl.prime == null && <button onClick={() => run({ type: "claim", kind: "prime" })}>🏆 7 cartes ({fmt(o.prime.amount)})</button>}
+          {o.ten?.on && cl.ten == null && <button onClick={() => run({ type: "claim", kind: "ten" })}>🏆 10 cartes ({fmt(o.ten.amount)})</button>}
         </div>
       )}
       <div className="bar">
@@ -233,11 +232,24 @@ export default function RamiOnline({ view, act, onExit }) {
         <button className="go" disabled={!canDiscard || sel === null || (byId[sel] && isJoker(byId[sel], g.joker))} onClick={async () => { if (await run({ type: "discard", cardId: sel })) setSel(null); }}>Jeter</button>
       </div>
 
-      <div ref={handRef} className={`hand ${myTurn ? "turn" : ""}`} onPointerDown={hDown} onPointerMove={hMove} onPointerUp={hUp} onPointerCancel={() => { hd.current = null; setGhost(null); }}>
-        {cards.map((c) => (
-          <Card key={c.id} data-id={c.id} c={c} sel={sel === c.id}
-            className={`${g.drawn && g.drawn.id === c.id ? "new" : ""} ${isJoker(c, g.joker) ? "jk" : ""} ${ghost && ghost.id === c.id ? "ph" : ""}`} />
-        ))}
+      <div ref={handRef} className={`hand grouped ${myTurn ? "turn" : ""}`} onPointerDown={hDown} onPointerMove={hMove} onPointerUp={hUp} onPointerCancel={() => { hd.current = null; setGhost(null); }}>
+        {(() => {
+          const sizes = cards.length >= 14 ? [4, 5, 5] : [4, 4, 5];
+          let i = 0;
+          return sizes.map((sz, gi) => {
+            const chunk = cards.slice(i, i + sz);
+            i += sz;
+            if (!chunk.length) return null;
+            return (
+              <div key={gi} className="hand-group">
+                {chunk.map((c) => (
+                  <Card key={c.id} data-id={c.id} c={c} sel={sel === c.id}
+                    className={`${g.drawn && g.drawn.id === c.id ? "new" : ""} ${isJoker(c, g.joker) ? "jk" : ""} ${ghost && ghost.id === c.id ? "ph" : ""}`} />
+                ))}
+              </div>
+            );
+          });
+        })()}
       </div>
 
       {live && g.vote && !g.vote.done && (

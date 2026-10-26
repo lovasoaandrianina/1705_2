@@ -1,4 +1,4 @@
-// Thème clair (blanc / jaune) ↔ sombre royal (marron sombre / doré)
+// Thème clair (blanc / jaune) ↔ sombre (vert sombre / or)
 const KEY = "gasyno_theme";
 
 export function getTheme() {

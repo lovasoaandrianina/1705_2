@@ -161,7 +161,10 @@ simulate("9 joueurs", { hands: 1500, blinds: [100, 200], players: 9 });
     E.act(g, b, { type: "call" });                // B : suit avec ses 15 000
     ok(g.seats[a].stack === 5000, `A récupère ses 5 000 Ar non suivis tout de suite : ${g.seats[a].stack}`);
     ok(g.seats[a].total === 15000 && g.seats[b].total === 15000, "les deux joueurs ont 15 000 dans le pot");
-    ok(g.hand.board.length === 3 && g.hand.refund && g.hand.refund.amount === 5000, "remboursement annoncé, cartes seulement ensuite");
+    ok(g.hand.reveal && g.hand.board.length === 0 && g.hand.refund && g.hand.refund.amount === 5000, "remboursement annoncé, mains retournées AVANT les cartes communes");
+    ok(E.view(g, 1).seats[b].cards.every((c) => c !== null) && E.view(g, 1).seats[b].cards.length === 2, "tapis : l'adversaire voit les cartes de B");
+    clock += 4000; E.tick(g);
+    ok(g.hand.board.length === 3, "puis le flop est distribué");
     let guard = 0; while (g.phase === "hand" && guard++ < 60) { clock += 1000; E.tick(g); }
     ok(g.last && g.last.winners.length === 1 || g.last.winners.length === 2, "résultat de la main");
     ok(!g.last.winners.some((w) => w.seat === a && w.amount === 5000), "le remboursement n'est pas compté comme un gain");

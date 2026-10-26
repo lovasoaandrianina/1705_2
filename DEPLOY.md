@@ -67,3 +67,13 @@ Si la personne n'a pas de compte, elle s'inscrit puis arrive directement sur la 
 - Chat en direct dans chaque table (Domino et Rami : salle d'attente + partie ; Poker : à table). Il vit uniquement en mémoire du serveur : aucun historique n'est enregistré, la salle est détruite à la fin de la partie (ou quand la table est annulée / fermée) et un redémarrage du serveur la vide. Comme le reste du jeu, il suppose une seule instance Render.
 - Accès réservé aux joueurs de la table (vérifié côté serveur). Limites : 300 caractères, 6 messages / 5 s par joueur. Fonctions : indicateur « écrit… », présence, réactions emoji volantes, aperçu des nouveaux messages, bulle déplaçable.
 
+
+
+## Back office (`/admin`)
+
+- Ouvre `https://ton-site/admin` sur ton téléphone et saisis ta `ADMIN_KEY` (Render → Environment). Un jeton de 30 jours est gardé sur l'appareil ; la clé n'est jamais stockée.
+- **Dépôts / retraits** : un joueur envoie une *demande* (le dépôt n'est plus crédité automatiquement). Tu la valides depuis le back office : le solde est mis à jour tout seul. Un retrait retire les jetons tout de suite ; refusé ou annulé, ils sont rendus.
+- **Sonnerie** : page ouverte, une sonnerie retentit en boucle avec la fiche du joueur. Touche « Démarrer la surveillance » à chaque ouverture (nécessaire pour débloquer le son sur iPhone).
+- **Notifications page fermée** : Réglages → Activer. Sur iPhone : Safari → Partager → « Sur l'écran d'accueil », puis ouvre l'app depuis l'écran d'accueil (iOS 16.4 minimum). Mets un vrai e-mail dans `VAPID_SUBJECT`.
+- **Offre gratuite Render** : le serveur s'endort après 15 min sans visite ; une demande de joueur le réveille, mais une page /admin ouverte le maintient éveillé grâce à sa requête toutes les 3 s.
+- Renseigne les consignes de dépôt (tes numéros MVola / Orange / Airtel) dans Réglages : les joueurs les voient dans leur fenêtre de dépôt.

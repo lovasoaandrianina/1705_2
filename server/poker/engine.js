@@ -4,18 +4,19 @@ import { HttpError } from "../rami/money.js";
 import { newDeck, rnd, score7, handName } from "./cards.js";
 
 export const SEATS = 9;
-export const MIN_BUY = 2000, MAX_BUY = 20000;   // achat de jetons : 1 jeton = 1 Ar
+export const MIN_BUY = 2000, MAX_BUY = null;   // min 2000 Ar, pas de plafond max
 export const TURN_MS = 25000;       // temps de réflexion d'un joueur
 export const BETWEEN_MS = 7000;     // pause entre deux mains (résultat visible)
 export const RUNOUT_MS = 3200;      // suspense entre les cartes quand tout le monde est à tapis
 export const REVEAL_FLOP_MS = 2800; // le flop se retourne carte par carte avant que les enchères reprennent
 export const REVEAL_MS = 2100;      // turn / river
 export const SHOWDOWN_MS = 2000;    // suspense avant que les mains soient montrées
+export const REVEAL_ALLIN_MS = 3000; // tout le monde à tapis : les cartes des joueurs sont retournées, pause avant le flop / turn / river
 export const BUST_KICK_MS = 90000;  // un joueur sans jetons qui ne rachète pas est retiré de la table
 
 const bad = (m) => new HttpError(400, m);
 const blankHand = () => ({ inHand: false, hole: [], bet: 0, total: 0, folded: true, allin: false, acted: false, noRaise: false, lastAct: null });
-const emptySeat = () => ({ empty: true, userId: null, name: "", stack: 0, invested: 0, pendingAdd: 0, leaving: false, timeouts: 0, bustedAt: 0, feesPaid: 0 });
+const emptySeat = () => ({ empty: true, userId: null, name: "", avatar: null, stack: 0, invested: 0, pendingAdd: 0, leaving: false, timeouts: 0, bustedAt: 0, feesPaid: 0 });
 
 export function newGame(sb, bb, feeBps = 0, buyIn = MIN_BUY) {
   const g = { game: "poker", sb, bb, buyIn, feeBps, feeLog: [], feesTotal: 0, seats: [], button: rnd(SEATS), handNo: 0, phase: "between", nextAt: Date.now() + 3000, hand: null, last: null };
@@ -42,7 +43,7 @@ export function seatHuman(g, p) {
   g.seats.forEach((s, i) => { if (s.empty) cand.push(i); });
   if (!cand.length) throw bad("Table complète (9 joueurs)");
   const i = cand[rnd(cand.length)];
-  Object.assign(g.seats[i], blankHand(), { empty: false, userId: p.userId, name: p.name, stack: p.buy, invested: p.buy, pendingAdd: 0, leaving: false, timeouts: 0, bustedAt: 0, feesPaid: 0 });
+  Object.assign(g.seats[i], blankHand(), { empty: false, userId: p.userId, name: p.name, avatar: p.avatar || null, stack: p.buy, invested: p.buy, pendingAdd: 0, leaving: false, timeouts: 0, bustedAt: 0, feesPaid: 0 });
   return i;
 }
 
@@ -141,8 +142,10 @@ function advance(g) {
     const done = can.every((s) => s.acted && s.bet >= h.currentBet) || (can.length <= 1 && can.every((s) => s.bet >= h.currentBet));
     if (done) {
       refundUncalled(g); // la part du plus gros tapis que personne ne peut suivre est rendue avant toute carte
+      // Plus aucune enchère possible alors qu'il reste 2 joueurs ou plus : comme au poker réel, les cartes sont retournées AVANT les cartes communes
+      if (alive.length >= 2 && can.length <= 1 && !h.reveal) { h.reveal = true; h.waitUntil = Date.now() + REVEAL_ALLIN_MS; return; }
       if (h.street === "river") {
-        if (!h.sd) { h.sd = true; h.waitUntil = Date.now() + SHOWDOWN_MS; return; } // petit suspense avant l'abattage
+        if (!h.sd) { h.sd = true; h.waitUntil = Date.now() + (h.reveal ? 1200 : SHOWDOWN_MS); return; } // petit suspense avant l'abattage
         return showdown(g);
       }
       nextStreet(g);
@@ -166,7 +169,8 @@ function refundUncalled(g) {
   const excess = top.total - second;
   if (excess <= 0 || top.folded || !top.inHand) return;
   top.total -= excess; top.bet = Math.max(0, top.bet - excess); top.stack += excess; top.allin = top.stack === 0;
-  if (!h.refund) h.refund = { seat: order[0], name: top.name, amount: excess };
+  h.currentBet = Math.max(0, ...g.seats.map((x) => x.bet)); // la mise à suivre redescend au niveau réellement suivi (évite un tour d'enchères fantôme)
+  if (!h.refund || h.refund.seat !== order[0]) h.refund = { seat: order[0], name: top.name, amount: excess }; else h.refund.amount += excess;
 }
 
 function nextStreet(g) {
@@ -270,6 +274,7 @@ export function showdown(g) {
 // Commission : prélevée sur le GAIN NET de chaque main gagnée (gain du pot − ce que le joueur y avait mis), directement sur ses jetons
 function finish(g, last, won) {
   if (g.hand && g.hand.refund) last.refund = g.hand.refund;
+  last.revealed = !!(g.hand && g.hand.reveal);
   last.fees = [];
   g.feeLog = g.feeLog || [];
   for (const [i, amt] of Object.entries(won)) {
@@ -328,19 +333,21 @@ export function view(g, uid) {
     };
   }
   const shown = g.phase === "between" && g.last ? g.last.shown : {};
+  const reveal = !!(h && h.reveal); // tapis : les cartes de tous les joueurs encore en lice sont visibles par tout le monde
+  const liveName = (s) => (reveal && h.board.length >= 3 ? handName(score7([...s.hole, ...h.board])) : null);
   const pot = g.seats.reduce((a, s) => a + s.total, 0);
   const myScore = mine && h && mine.hole.length === 2 && h.board.length >= 3 && !mine.folded ? handName(score7([...mine.hole, ...h.board])) : null;
   return {
-    kind: "poker", sb: g.sb, bb: g.bb, buyIn: g.buyIn || MIN_BUY, minBuy: MIN_BUY, maxBuy: MAX_BUY,
+    kind: "poker", sb: g.sb, bb: g.bb, buyIn: g.buyIn || MIN_BUY, minBuy: MIN_BUY, maxBuy: null,
     refund: h ? h.refund || null : g.last && g.last.refund ? g.last.refund : null, me, button: g.button, handNo: g.handNo,
     phase: g.phase, street: h ? h.street : null, board: h ? h.board : g.last && g.phase === "between" ? g.last.board : [],
     pot: h ? pot : 0, toAct: h ? h.toAct : -1, msLeft: h ? Math.max(0, h.deadline - now) : 0, turnMs: TURN_MS,
-    nextMs: g.phase === "between" ? Math.max(0, g.nextAt - now) : 0, runout: !!(h && h.waitUntil), sd: !!(h && h.sd), leave: me >= 0 ? leaveCheck(g, me) : { ok: true, in: 0 },
+    nextMs: g.phase === "between" ? Math.max(0, g.nextAt - now) : 0, runout: !!(h && h.waitUntil), sd: !!(h && h.sd), reveal, revealedLast: !!(g.phase === "between" && g.last && g.last.revealed), leave: me >= 0 ? leaveCheck(g, me) : { ok: true, in: 0 },
     seats: g.seats.map((s, i) => ({
-      i, empty: !!s.empty, name: s.name, stack: s.stack, bet: s.bet, folded: s.inHand ? s.folded : true, inHand: s.inHand && !!h,
+      i, empty: !!s.empty, name: s.name, avatar: s.avatar || null, stack: s.stack, bet: s.bet, folded: s.inHand ? s.folded : true, inHand: s.inHand && !!h,
       allin: s.allin, lastAct: s.lastAct, leaving: s.leaving, pendingAdd: s.pendingAdd,
-      cards: i === me ? s.hole : shown[i] ? shown[i].cards : h && s.inHand && !s.folded ? [null, null] : [],
-      handName: shown[i] ? shown[i].name : null,
+      cards: i === me ? s.hole : shown[i] ? shown[i].cards : h && s.inHand && !s.folded ? (reveal ? s.hole : [null, null]) : [],
+      handName: shown[i] ? shown[i].name : h && s.inHand && !s.folded ? liveName(s) : null,
     })),
     legal, myHand: myScore, last: g.last,
     mine: mine ? { stack: mine.stack, pendingAdd: mine.pendingAdd, invested: mine.invested, feesPaid: mine.feesPaid || 0, leaving: mine.leaving, busted: mine.stack === 0 && mine.pendingAdd === 0 } : null,

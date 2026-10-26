@@ -24,7 +24,7 @@ export default function Lobby({ game, user, onOpen, onBack, setQueue }) {
       <h1>{GAME_NAMES[game]} entre amis</h1>
       <p className="sub">
         Ton solde : <b>{fmt(user.balance)}</b>
-        {game === "domino" && <><br />Le Domino se joue à 3 joueurs exactement.</>}
+        {game === "domino" && <><br />Domino à 2 ou 3 joueurs · score à 100 ou 120.</>}
       </p>
 
       {d.mine && (

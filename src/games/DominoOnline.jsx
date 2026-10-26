@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Tile from "../components/Tile";
+import Avatar from "../components/Avatar";
 import Payout from "../components/Payout";
 import SoundToggle from "../components/SoundToggle";
 import { play, useWatch } from "../sound";
@@ -37,11 +38,13 @@ export default function DominoOnline({ view, act, onExit }) {
   const elapsed = g.dealTotal - dealLeft;
   const dealing = dealLeft > 0 && g.phase === "play" && g.winner === null;
   const shuffling = dealing && elapsed < SHUFFLE_MS;
-  const dealt = dealing ? clamp(Math.floor(((elapsed - SHUFFLE_MS) / DEAL_MS) * 21), 0, 21) : 21;
-  const cnt = (s) => (dealing ? Math.floor((dealt + 2 - s) / 3) : g.counts[s]);
+  const nPlayers = g.N || 3;
+  const totalDeal = nPlayers * 7;
+  const dealt = dealing ? clamp(Math.floor(((elapsed - SHUFFLE_MS) / DEAL_MS) * totalDeal), 0, totalDeal) : totalDeal;
+  const cnt = (s) => (dealing ? Math.floor((dealt + (nPlayers - 1) - s) / nPlayers) : g.counts[s]);
   const shown = dealing ? tiles.slice(0, cnt(me)) : tiles;
   const stockShown = dealing ? 28 - dealt : g.stock;
-  const flying = dealing && !shuffling ? [0, 1, 2, 3].map((k) => dealt - 1 - k).filter((k) => k >= 0 && k < 21) : [];
+  const flying = dealing && !shuffling ? [0, 1, 2, 3].map((k) => dealt - 1 - k).filter((k) => k >= 0 && k < totalDeal) : [];
 
   /* ── tour de jeu ── */
   const lg = g.legal || {};
@@ -50,7 +53,9 @@ export default function DominoOnline({ view, act, onExit }) {
   const sides = sel !== null && lg[sel] ? lg[sel] : [];
   const left = Math.max(0, g.msLeft - (now - view.fetchedAt));
   const secs = Math.ceil(left / 1000);
-  const canPass = myTurn && !hasLegal;
+  const stockLeft = typeof g.stock === "number" ? g.stock : 0;
+  const canDraw = myTurn && !hasLegal && nPlayers === 2 && stockLeft > 0;
+  const canPass = myTurn && !hasLegal && (nPlayers !== 2 || stockLeft === 0);
 
   /* ── sons ── */
   const prevT = useRef({ round: g.round, len: g.chain.length, turn: g.turn });
@@ -114,13 +119,16 @@ export default function DominoOnline({ view, act, onExit }) {
     : g.winner !== null ? "Partie terminée"
     : g.phase === "between" ? "Manche terminée"
     : myTurn
-      ? `${hasLegal ? (sel === null ? "À toi : touche un domino" : "Choisis le côté") : "Aucun domino jouable : passe"} · ${secs}s`
+      ? `${hasLegal
+          ? (sel === null ? "À toi : touche un domino" : "Choisis le côté")
+          : (canDraw ? `Aucun domino jouable : pioche (${stockLeft} restants)` : "Aucun domino jouable : passe")} · ${secs}s`
       : `Tour de ${g.names[g.turn]} · ${secs}s`);
 
   const opp = (rel) => {
-    const s = (me + rel) % 3, active = g.winner === null && g.phase === "play" && g.turn === s && !dealing;
+    const s = (me + rel) % nPlayers, active = g.winner === null && g.phase === "play" && g.turn === s && !dealing;
     return (
       <div key={s} className={`dm-opp ${active ? "turn" : ""}`}>
+        <div className="dm-av"><Avatar user={{ pseudo: g.names[s], avatar: (g.avatars || [])[s] }} /></div>
         <b>{g.names[s]}</b><small>{g.scores[s]} pts · {cnt(s)} dominos</small>
         <div className="dm-backs">{Array.from({ length: cnt(s) }, (_, k) => <Tile key={k} back mini className="popin" />)}</div>
       </div>
@@ -133,11 +141,11 @@ export default function DominoOnline({ view, act, onExit }) {
 
   return (
     <div className="dm-app">
-      <div className="dm-top">{opp(1)}{opp(2)}</div>
+      <div className="dm-top">{Array.from({ length: nPlayers - 1 }, (_, i) => opp(i + 1))}</div>
 
       <div className="dm-scores">
-        {[0, 1, 2].map((rel) => {
-          const s = (me + rel) % 3;
+        {Array.from({ length: nPlayers }, (_, rel) => {
+          const s = (me + rel) % nPlayers;
           return (
             <div key={s} className={`dm-sc ${rel === 0 ? "me" : ""}`}>
               {rel === 0 ? "Moi" : g.names[s]} · {g.scores[s]}/{g.target}
@@ -171,11 +179,11 @@ export default function DominoOnline({ view, act, onExit }) {
           </>
         )}
         {dealing && !shuffling && <div className="dm-dealtxt">Distribution : 7 dominos chacun</div>}
-        {flying.map((k) => <span key={`${g.dealNo}-${k}`} className={`dm-fly r${(k % 3 - me + 3) % 3}`}><Tile back mini /></span>)}
+        {flying.map((k) => <span key={`${g.dealNo}-${k}`} className={`dm-fly r${(k % nPlayers - me + nPlayers) % nPlayers}`}><Tile back mini /></span>)}
 
         <div className="dm-talon">
           <div className="dm-stack">{[0, 1, 2].map((k) => <Tile key={k} back dir="v" className="sm" style={{ top: k * 2 }} />)}</div>
-          <span>Réserve inactive</span>
+          <span>{nPlayers === 2 ? `Sabot · ${stockLeft}` : "Réserve inactive"}</span>
         </div>
       </div>
 
@@ -184,6 +192,7 @@ export default function DominoOnline({ view, act, onExit }) {
 
       <div className="dm-actions">
         <button onClick={quit}>← Quitter</button>
+        {canDraw && <button className="gold" onClick={() => run({ type: "draw" })}>Piocher ({stockLeft})</button>}
         {canPass && <button className="gold" onClick={() => run({ type: "pass" })}>Passer</button>}
         {myTurn && sel !== null && sides.includes("C") && <button className="gold" onClick={() => place("C")}>Poser</button>}
         {myTurn && sel !== null && sides.includes("L") && <button className="gold" onClick={() => place("L")}>◀ Gauche ({g.ends.l})</button>}
@@ -202,8 +211,8 @@ export default function DominoOnline({ view, act, onExit }) {
         <div className="dm-ov" onClick={() => setRules(false)}>
           <div className="dm-box">
             <h3>Règles de la table</h3>
-            <p>3 joueurs · 7 dominos chacun · premier à {g.target} points.</p>
-            <p>On pose un domino sur l'un des deux bouts. Sans domino jouable, on passe sans piocher. Première manche : le plus petit double disponible (0-0, puis 1-1, etc.) désigne le premier joueur, qui peut poser le domino de son choix. Dès la deuxième manche, le départ tourne dans le sens des aiguilles d'une montre, quel que soit le gagnant précédent. Celui qui n'a plus de dominos (ou le plus petit total si le jeu est bloqué) marque les points des dominos restants chez les autres. À la fin de chaque manche, les mains sont révélées pour vérifier le score.</p>
+            <p>{nPlayers} joueurs · 7 dominos chacun · premier à {g.target} points.</p>
+            <p>On pose un domino sur l'un des deux bouts. À 3 joueurs, sans domino jouable on passe (pas de pioche). À 2 joueurs, on pioche dans le sabot jusqu'à pouvoir jouer ou jusqu'à épuisement du sabot, puis on passe. Première manche : le plus petit double disponible (0-0, puis 1-1, etc.) désigne le premier joueur, qui peut poser le domino de son choix. Dès la deuxième manche, le départ tourne dans le sens des aiguilles d'une montre. Celui qui n'a plus de dominos (ou le plus petit total si le jeu est bloqué) marque les points des dominos restants chez les autres.</p>
             <p><b>{rulesText(view.config, "domino")}</b></p>
             <button className="gold" onClick={() => setRules(false)}>Fermer</button>
           </div>
@@ -233,7 +242,7 @@ export default function DominoOnline({ view, act, onExit }) {
           <div className="dm-box">
             <h3>{g.names[g.winner]} gagne la partie !</h3>
             <p>{g.win.reason}</p>
-            <div className="dm-final">{[0, 1, 2].map((s) => <span key={s}>{g.names[s]} : {g.scores[s]}</span>)}</div>
+            <div className="dm-final">{Array.from({ length: nPlayers }, (_, s) => <span key={s}>{g.names[s]} : {g.scores[s]}</span>)}</div>
             {R && (
               <>
                 <p>{R.winner === null

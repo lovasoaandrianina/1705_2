@@ -28,6 +28,11 @@ export default function App() {
   const [pokerId, setPokerId] = useState(null);
   const [queue, setQueue] = useState(null); // id de la table dont j'attends une place
   const [toast, setToast] = useState(null);
+  const [splash, setSplash] = useState(true); // écran d'ouverture Gasyno
+  useEffect(() => {
+    const t = setTimeout(() => setSplash(false), 2200);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     if (!getToken()) return undefined;
@@ -74,8 +79,29 @@ export default function App() {
   };
   const open = (id) => { sessionStorage.removeItem("invite"); setTableId(id); setScreen("table"); };
 
-  if (!ready) return <div className="shell center">{waking ? "Le serveur se réveille… (jusqu'à une minute après une période d'inactivité)" : "Chargement…"}</div>;
-  if (!user) return <AuthPage onAuth={onAuth} />;
+  const splashEl = (
+    <div className={`splash${splash ? "" : " fade"}`} aria-hidden={!splash}>
+      <img className="splash-logo" src="/gasyno-logo-gold.png" alt="Gasyno" />
+      <p className="splash-tag">Jeux, ambiances et bons moments</p>
+    </div>
+  );
+
+  if (!ready) {
+    return (
+      <>
+        {splashEl}
+        <div className="shell center">{waking ? "Le serveur se réveille… (jusqu'à une minute après une période d'inactivité)" : "Chargement…"}</div>
+      </>
+    );
+  }
+  if (!user) {
+    return (
+      <>
+        {splashEl}
+        <AuthPage onAuth={onAuth} />
+      </>
+    );
+  }
 
   let view;
   if (screen === "rami-free") view = <Rami onExit={() => setScreen("rami-menu")} />;
@@ -91,6 +117,7 @@ export default function App() {
 
   return (
     <>
+      {splashEl}
       {view}
       {toast && (
         <div className="toast">

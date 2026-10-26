@@ -92,3 +92,6 @@
 .recap div{display:flex;justify-content:space-between;gap:16px;padding:2px 0}
 .recap .fee{color:#ffb4b4}
 .recap .tot{border-top:1px solid #fff4;margin-top:4px;padding-top:4px;font-weight:800;color:#ffd54a}
+.dm-av{display:inline-block;vertical-align:middle;margin-right:4px}
+.dm-av .avatar{width:26px;height:26px;font-size:11px;border-width:1px}
+.dm-opp{display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px}

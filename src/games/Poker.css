@@ -99,3 +99,14 @@
 .pk-refund{font-size:10.5px;color:#cfe9ff;background:#0007;border-radius:8px;padding:2px 8px}
 .pk-top>*{white-space:nowrap}
 @media (max-width:350px){.pk-top{font-size:10.5px;padding:8px 6px}.pk-link{font-size:10.5px}}
+
+/* abattage : cartes des adversaires retournées (tapis / fin de main) */
+.pk-card.sm{width:30px;height:42px;border-radius:5px;box-shadow:0 2px 5px #000a}.pk-card.sm b{font-size:14px}.pk-card.sm i{font-size:15px}
+.pk-card.sm.back{border-width:1px}
+.pk-flip.sm{width:30px;height:42px;border-radius:5px}
+.pk-hole.open{gap:3px;margin-bottom:3px}
+.pk-addnote{font-size:12px;opacity:.9;text-align:center;margin-bottom:6px;line-height:1.35}
+.pk-addnote b{color:#ffe58a}
+
+.pk-av{width:28px;height:28px;margin:0 auto 2px}
+.pk-av .avatar{width:28px;height:28px;font-size:12px;border-width:1px}

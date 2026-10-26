@@ -93,6 +93,34 @@ export async function migrate() {
         user_id INTEGER PRIMARY KEY REFERENCES users(id),
         table_id INTEGER NOT NULL REFERENCES poker_tables(id)
       )`,
+      // Demandes de dépôt / retrait : validées à la main depuis le back office (/admin)
+      `CREATE TABLE IF NOT EXISTS payment_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        kind TEXT NOT NULL CHECK (kind IN ('deposit','withdraw')),
+        amount INTEGER NOT NULL CHECK (amount > 0),
+        final_amount INTEGER,
+        method TEXT,
+        reference TEXT,
+        account TEXT,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','cancelled')),
+        admin_note TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        processed_at TEXT
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_pr_status ON payment_requests(status, id)`,
+      `CREATE INDEX IF NOT EXISTS idx_pr_user ON payment_requests(user_id, id DESC)`,
+      `CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS push_subs (endpoint TEXT PRIMARY KEY, data TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+      `CREATE TABLE IF NOT EXISTS admin_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action TEXT NOT NULL,
+        user_id INTEGER,
+        request_id INTEGER,
+        amount INTEGER,
+        note TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )`,
       `CREATE TABLE IF NOT EXISTS table_players (
         table_id INTEGER NOT NULL REFERENCES game_tables(id),
         user_id INTEGER NOT NULL REFERENCES users(id),
@@ -108,6 +136,12 @@ export async function migrate() {
   const gameTableColumns = (await db.execute("PRAGMA table_info(game_tables)")).rows;
   if (!gameTableColumns.some((column) => column.name === "game")) {
     await db.execute("ALTER TABLE game_tables ADD COLUMN game TEXT NOT NULL DEFAULT 'rami'");
+  }
+
+  // Comptes suspendus depuis le back office
+  const userColumns = (await db.execute("PRAGMA table_info(users)")).rows;
+  if (!userColumns.some((column) => column.name === "blocked")) {
+    await db.execute("ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0");
   }
 
   // Commissions : on distingue celles du poker (table_id y est l'identifiant d'une table de poker, pas d'une table Rami/Domino)
