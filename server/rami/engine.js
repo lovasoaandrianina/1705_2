@@ -113,86 +113,87 @@ export function meldedAtLeast(cards, J, n) {
   const { grid, wilds } = prep(cards, J);
   return solve(grid, wilds, mkCtx({ milestone: true, maxSkips: cards.length - n }));
 }
-// Validation d'une combinaison de 3 ou 4 cartes. Un joker ne compte que s'il
-// remplace exactement une valeur/couleur manquante dans un groupe valide.
-function validGroup(group, J) {
-  if (group.length < 3 || group.length > 4) return false;
-  const wild = group.filter(c => isJoker(c, J));
-  const real = group.filter(c => !isJoker(c, J));
-  if (!real.length) return false;
-  // Brelan/carré : même rang, couleurs distinctes, joker(s) = couleurs manquantes.
-  const ranks = new Set(real.map(c => c.r));
-  const suits = new Set(real.map(c => c.s));
-  if (ranks.size === 1 && suits.size === real.length && real.length + wild.length <= 4) return true;
-  // Suite : même couleur et rangs consécutifs, avec jokers aux rangs manquants.
-  const suitSet = new Set(real.map(c => c.s));
-  if (suitSet.size !== 1 || new Set(real.map(c => c.r)).size !== real.length) return false;
-  const suit = real[0].s;
-  const ranksInGroup = real.map(c => c.r);
-  // As bas (A-2-3) ou haut (Q-K-A), mais jamais cyclique au milieu.
-  const candidates = [];
-  for (let a = 1; a <= 14 - group.length + 1; a++) {
-    const seq = Array.from({length: group.length}, (_,i) => a+i).map(r => r === 14 ? 1 : r);
-    if (new Set(seq).size !== seq.length) continue;
-    if (seq.filter(r => ranksInGroup.includes(r)).length === real.length) candidates.push(seq);
-  }
-  return candidates.some(seq => ranksInGroup.every(r => seq.includes(r)) && seq.filter(r => !ranksInGroup.includes(r)).length === wild.length);
-}
-function combinations(items, size, start=0, prefix=[], out=[]) {
-  if (prefix.length === size) { out.push(prefix); return out; }
-  for (let i=start; i<=items.length-(size-prefix.length); i++) combinations(items,size,i+1,[...prefix,items[i]],out);
-  return out;
-}
-// « Carré » : quatre cartes formant un carré (même rang) ou une suite de 4.
-export function findCarre(cards, J) {
-  for (const group of combinations(cards, 4)) if (validGroup(group, J)) return group;
-  return null;
-}
-// « 10 cartes » : au moins dix cartes réparties en combinaisons valides, jokers inclus.
-export function tenGroups(cards, J) {
-  if (cards.length < 10 || !meldedAtLeast(cards, J, 10)) return null;
-  const { grid, wilds } = prep(cards, J);
-  const ctx = mkCtx({ milestone: true, maxSkips: cards.length - 10 });
-  return solve(grid, wilds, ctx) ? ctx.out.map(x => x.cards).filter(Boolean) : null;
-}
-export const hasCarre = (cards, J) => !!findCarre(cards, J);
-export const hasTen = (cards, J) => !!tenGroups(cards, J);
+const combinations = (items, size, visit, start = 0, picked = []) => {
+  if (picked.length === size) { visit(picked); return; }
+  for (let i = start; i <= items.length - (size - picked.length); i++) combinations(items, size, visit, i + 1, [...picked, items[i]]);
+};
+// ───── Primes Carré / 7 cartes / 10 cartes : SANS JOKER ─────
+// Le joker n'est jamais un joker ici : il compte comme sa vraie carte (un 8♠ joker reste un 8♠ dans 5-6-7-8 ou 8-8-8-8).
+// Les combinaisons sont donc 100 % naturelles : même rang / couleurs différentes (tri, carré) ou suite de même couleur.
+const isSetN = (g) => g.every((c) => c.r === g[0].r) && new Set(g.map((c) => c.s)).size === g.length;
+const isRunN = (g) => {
+  if (new Set(g.map((c) => c.s)).size !== 1 || new Set(g.map((c) => c.r)).size !== g.length) return false;
+  const lo = g.map((c) => c.r).sort((a, b) => a - b);
+  const hi = lo.map((r) => (r === 1 ? 14 : r)).sort((a, b) => a - b); // As haut : …Q-K-A
+  const seq = (v) => v.every((x, i) => i === 0 || x === v[i - 1] + 1);
+  return seq(lo) || seq(hi);
+};
+const natural = (g) => ({ set: isSetN(g), run: isRunN(g) });
+const okN = (g) => { const k = natural(g); return k.set || k.run; };
 
-// « Prime » : une combinaison valide de 4 cartes + une combinaison valide de 3,
-// sans chevauchement. Les jokers doivent remplacer une carte réellement manquante.
-export function primeGroups(cards, J) {
-  if (cards.length < 7) return null;
-  for (const four of combinations(cards, 4)) {
-    if (!validGroup(four, J)) continue;
-    const used = new Set(four.map(c => c.id));
-    const rest = cards.filter(c => !used.has(c.id));
-    for (const three of combinations(rest, 3)) if (validGroup(three, J)) return [four, three];
-  }
-  return null;
+// Obligations d'une prime (7 ou 10 cartes) : « libre », ou avec au moins un tri et/ou une suite.
+const reqOf = (o) => ({ needSet: !!o?.needSet, needRun: !!o?.needRun });
+const reqText = (r) => (r.needSet && r.needRun ? " avec un tri et une suite" : r.needSet ? " avec au moins un tri" : r.needRun ? " avec au moins une suite" : "");
+const meetsReq = (melds, req) => {
+  if (!req.needSet && !req.needRun) return true;
+  const k = melds.map(natural);
+  if (req.needSet && req.needRun) return k.some((a, i) => a.set && k.some((b, j) => j !== i && b.run));
+  return req.needSet ? k.some((a) => a.set) : k.some((a) => a.run);
+};
+// Cherche `sizes.length` combinaisons naturelles disjointes (tailles données) respectant les obligations.
+function findMelds(cards, sizes, req) {
+  const go = (pool, i, acc) => {
+    if (i === sizes.length) return meetsReq(acc, req) ? acc : null;
+    let res = null;
+    combinations(pool, sizes[i], (grp) => {
+      if (res || !okN(grp)) return;
+      const ids = new Set(grp.map((c) => c.id));
+      res = go(pool.filter((c) => !ids.has(c.id)), i + 1, [...acc, grp]);
+    });
+    return res;
+  };
+  return cards.length < sizes.reduce((x, y) => x + y, 0) ? null : go(cards, 0, []);
 }
-export const hasPrime = (cards, J) => !!primeGroups(cards, J);
+
+// Carré : 4 identiques de couleurs différentes (4-4-4-4) ou suite de 4 de même couleur (2-3-4-5).
+export function findCarre(cards) {
+  let found = null;
+  combinations(cards, 4, (g) => { if (!found && okN(g)) found = g; });
+  return found;
+}
+// 7 cartes : un carré (4) + un tri ou une suite (3).
+export const primeGroups = (cards, _J, req = {}) => findMelds(cards, [4, 3], req);
+// 10 cartes : un carré (4) + un tri/suite (3) + un tri/suite (3).
+export const tenGroups = (cards, _J, req = {}) => findMelds(cards, [4, 3, 3], req);
+export const hasCarre = (cards) => !!findCarre(cards);
+export const hasTen = (cards, J, req) => !!tenGroups(cards, J, req);
+
+export const hasPrime = (cards, J, req) => !!primeGroups(cards, J, req);
 const findWinDiscard = (hand, J, rules) => hand.find((c) => !isJoker(c, J) && meldsOf(hand.filter((x) => x.id !== c.id), J, rules));
 
 // Prime « Carré » ou « 10 cartes » : le joueur appuie sur le bouton, le serveur vérifie sa main ; le premier à réussir l'emporte
 // (elle sera payée sur le pot en fin de partie). Possible à tout moment de la partie.
+export const CLAIM_SHOW_MS = 30000; // les cartes d'une prime sont montrées à tous pendant 30 s
 export function claim(g, seat, kind) {
-  const labels = { carre: "Carré", ten: "10 cartes", prime: "Prime" };
+  const labels = { carre: "Carré", ten: "10 cartes", prime: "7 cartes" };
   const label = labels[kind] || kind;
   if (g.winner !== null) fail("La partie est terminée");
   if (!g.opts?.[kind]?.on) fail(`La prime « ${label} » n'est pas activée sur cette table`);
   g.claims ||= { carre: null, ten: null, prime: null };
   if (g.claims[kind] !== null) fail(`La prime « ${label} » est déjà prise`);
+  const req = reqOf(g.opts[kind]);
   let found = null;
-  if (kind === "carre") { const f = findCarre(g.hands[seat], g.joker); found = f && [f]; }
-  else if (kind === "ten") found = tenGroups(g.hands[seat], g.joker);
-  else if (kind === "prime") found = primeGroups(g.hands[seat], g.joker);
+  if (kind === "carre") { const f = findCarre(g.hands[seat]); found = f && [f]; }
+  else if (kind === "ten") found = tenGroups(g.hands[seat], null, req);
+  else if (kind === "prime") found = primeGroups(g.hands[seat], null, req);
   if (!found) {
-    if (kind === "carre") fail("Pas de carré : 4 cartes identiques ou suite de 4 ; le joker doit remplacer une carte manquante");
-    else if (kind === "ten") fail("Pas de 10 cartes : 10 cartes en combinaisons valides, joker inclus si bien placé");
-    else fail("Pas de Prime : une combinaison valide de 4 cartes et une de 3, joker inclus si bien placé");
+    if (kind === "carre") fail("Pas de carré valide : 4 cartes identiques de couleurs différentes ou suite de 4 de même couleur. Sans joker : chaque carte compte pour elle-même");
+    else if (kind === "ten") fail(`Pas de 10 cartes valides${reqText(req)} : un carré + 2 combinaisons de 3 (tri ou suite), sans joker : chaque carte compte pour elle-même`);
+    else fail(`Pas de 7 cartes valides${reqText(req)} : un carré (ou suite de 4) + un tri ou une suite de 3, sans joker : chaque carte compte pour elle-même`);
   }
   g.claims[kind] = seat;
   (g.claimCards ||= {})[kind] = found;
+  (g.claimAt ||= {})[kind] = Date.now();
 }
 
 /* ───────── Partie ───────── */
@@ -288,7 +289,8 @@ export function viewFor(g, seat, names, avatars = []) {
     hand: g.hands[seat] || [], counts: g.hands.map((h) => h.length), names, avatars,
     stock: g.stock.length, discards: g.discards, joker: g.joker, jInd: g.jInd,
     drawn: g.drawn && g.drawn.seat === seat ? { id: g.drawn.id, from: g.drawn.from } : null,
-    exhausted: g.exhausted, claims: g.claims || { carre: null, ten: null }, claimCards: g.claimCards || {}, potMult: g.potMult || 1,
+    exhausted: g.exhausted, claims: g.claims || { carre: null, ten: null }, claimCards: g.claimCards || {},
+    claimMs: Object.fromEntries(Object.entries(g.claimAt || {}).map(([k, t]) => [k, Math.max(0, t + CLAIM_SHOW_MS - Date.now())])), potMult: g.potMult || 1,
     vote: g.vote ? { done: g.vote.done, accepted: g.vote.accepted, msLeft: Math.max(0, g.vote.deadline - Date.now()), voted: Object.keys(g.vote.votes).length, mine: g.vote.votes[seat] } : null,
     winner: g.winner, win: g.win, result: g.result,
   };

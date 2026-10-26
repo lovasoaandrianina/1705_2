@@ -6,11 +6,12 @@ import SoundToggle from "../components/SoundToggle";
 import { play, useWatch } from "../sound";
 import { rulesText } from "../config";
 import "./Domino.css";
+import Rematch from "../components/Rematch";
 
 const SHUFFLE_MS = 2400, DEAL_MS = 2800; // + 400 ms de pause = 5 600 ms côté serveur
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
-export default function DominoOnline({ view, act, onExit }) {
+export default function DominoOnline({ view, act, onExit, onOpen }) {
   const g = view.game, me = g.seat;
   const [sel, setSel] = useState(null);
   const [order, setOrder] = useState(() => g.hand.map((t) => t.id));
@@ -259,7 +260,8 @@ export default function DominoOnline({ view, act, onExit }) {
               </>
             )}
             {g.result && <Payout result={g.result} me={me} winnerName={g.names[g.winner]} />}
-            <button className="gold big" onClick={onExit}>Retour</button>
+            <Rematch view={view} onOpen={onOpen} lost={g.result ? Math.max(0, g.result.staked[me] - g.result.paid[me]) : 0} />
+            <button className="big" onClick={onExit}>Retour</button>
           </div>
         </div>
       )}

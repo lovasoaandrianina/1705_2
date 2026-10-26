@@ -112,7 +112,7 @@ export default function App() {
   else if (screen === "poker-invite") view = <PokerInvite id={pokerId} user={user} onOpen={(id) => { sessionStorage.removeItem("invitePoker"); setPokerId(id); setScreen("poker-table"); }} onBack={() => { sessionStorage.removeItem("invitePoker"); setScreen("dashboard"); }} />;
   else if (screen === "poker-table") view = <PokerTable id={pokerId} user={user} setUser={setUser} onExit={() => setScreen("poker-lobby")} />;
   else if (screen === "invite") view = <Invite id={tableId} setQueue={setQueue} onOpen={open} onBack={() => { sessionStorage.removeItem("invite"); setScreen("dashboard"); }} />;
-  else if (screen === "table") view = <TableRoom id={tableId} user={user} onExit={(kind) => setScreen(kind === "domino" ? "domino-lobby" : "rami-lobby")} />;
+  else if (screen === "table") view = <TableRoom key={tableId} id={tableId} user={user} onOpen={open} onExit={(kind) => setScreen(kind === "domino" ? "domino-lobby" : "rami-lobby")} />;
   else view = <Dashboard user={user} setUser={setUser} onLogout={logout} onPlay={(g) => (g === "rami" ? setScreen("rami-menu") : g === "domino" ? setScreen("domino-lobby") : g === "poker" && setScreen("poker-lobby"))} />;
 
   return (

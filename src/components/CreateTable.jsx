@@ -13,6 +13,20 @@ const Prize = ({ label, v, set }) => (
   </label>
 );
 
+// Prime 7 / 10 cartes : montant + règle « libre » ou « avec tri / suite obligatoire(s) »
+const PrizeReq = ({ label, v, set }) => (
+  <>
+    <Prize label={label} v={v} set={set} />
+    {v.on && (
+      <div className="subopts">
+        <Chk checked={!v.needSet && !v.needRun} onChange={() => set({ ...v, needSet: false, needRun: false })}>Libre (tri ou suite, au choix)</Chk>
+        <Chk checked={!!v.needSet} onChange={(x) => set({ ...v, needSet: x })}>Avec au moins un tri obligatoire</Chk>
+        <Chk checked={!!v.needRun} onChange={(x) => set({ ...v, needRun: x })}>Avec au moins une suite obligatoire</Chk>
+      </div>
+    )}
+  </>
+);
+
 export default function CreateTable({ onClose, onCreated, feeBps = 350 }) {
   const [max, setMax] = useState(4);
   const [stake, setStake] = useState(5000);
@@ -21,8 +35,8 @@ export default function CreateTable({ onClose, onCreated, feeBps = 350 }) {
   const [joker, setJoker] = useState(true);
   const [x2, setX2] = useState(false);
   const [carre, setCarre] = useState({ on: false, amount: 5000 });
-  const [ten, setTen] = useState({ on: false, amount: 10000 });
-  const [prime, setPrime] = useState({ on: false, amount: 5000 });
+  const [ten, setTen] = useState({ on: false, amount: 10000, needSet: false, needRun: false });
+  const [prime, setPrime] = useState({ on: false, amount: 5000, needSet: false, needRun: false });
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -37,7 +51,7 @@ export default function CreateTable({ onClose, onCreated, feeBps = 350 }) {
     try {
       const { id } = await api.createTable({
         stake: Number(stake), maxPlayers: max, rules: { needSet, needRun, joker },
-        options: { x2, carre: { on: carre.on, amount: Number(carre.amount) }, ten: { on: ten.on, amount: Number(ten.amount) }, prime: { on: prime.on, amount: Number(prime.amount) } },
+        options: { x2, carre: { on: carre.on, amount: Number(carre.amount) }, ten: { on: ten.on, amount: Number(ten.amount), needSet: ten.needSet, needRun: ten.needRun }, prime: { on: prime.on, amount: Number(prime.amount), needSet: prime.needSet, needRun: prime.needRun } },
       });
       onCreated(id);
     } catch (x) { setErr(x.message); } finally { setBusy(false); }
@@ -64,10 +78,10 @@ export default function CreateTable({ onClose, onCreated, feeBps = 350 }) {
 
         <SetCard icon="🎁" title="Primes & options" hint="Prélevées sur le pot">
           <Prize label="Carré : prime au 1er qui l'a" v={carre} set={setCarre} />
-          <Prize label="Prime (7 cartes) : au 1er" v={prime} set={setPrime} />
-          <Prize label="10 cartes : prime au 1er" v={ten} set={setTen} />
+          <PrizeReq label="7 cartes : prime au 1er" v={prime} set={setPrime} />
+          <PrizeReq label="10 cartes : prime au 1er" v={ten} set={setTen} />
           <Chk checked={x2} onChange={setX2}>×2 proposé aux joueurs si le sabot est terminé</Chk>
-          {(carre.on || ten.on || prime.on) && <div className="info"><b>Carré</b> = 4 identiques ou suite de 4. <b>Prime</b> = (carré ou suite de 4) + (brelan ou suite de 3). <b>10 cartes</b> = 10 en combinaisons. Sans joker. Premier à réclamer touche la prime.</div>}
+          {(carre.on || ten.on || prime.on) && <div className="info"><b>Carré</b> = 4 identiques (4-4-4-4) ou suite de 4 (2-3-4-5). <b>7 cartes</b> = un carré + un tri ou une suite de 3. <b>10 cartes</b> = un carré + deux combinaisons de 3 (tri ou suite). <b>Sans joker</b> : chaque carte compte pour elle-même (un 8♠ joker reste un 8♠ normal). Premier à réclamer touche la prime ; ses cartes sont montrées à tous pendant 30 s.</div>}
           {x2 && <div className="info">Le ×2 n'est proposé (vote, il faut l'accord de tous) que lorsque le sabot est réellement terminé : rien n'est prélevé avant.</div>}
         </SetCard>
 

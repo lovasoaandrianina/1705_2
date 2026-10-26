@@ -31,11 +31,12 @@ export const optionsList = (c, game = "rami") => {
     return [`Objectif : ${target} points`];
   }
   const options = c?.options || {};
+  const req = (o) => (o?.needSet && o?.needRun ? "avec tri + suite" : o?.needSet ? "avec tri obligatoire" : o?.needRun ? "avec suite obligatoire" : "libre");
   const list = [
     options.x2 && "×2 proposé si le sabot est terminé",
     options.carre?.on && `Carré : ${fmt(options.carre.amount)} au premier (sans joker)`,
-    options.prime?.on && `Prime 7 cartes : ${fmt(options.prime.amount)} au premier (sans joker)`,
-    options.ten?.on && `10 cartes : ${fmt(options.ten.amount)} au premier (sans joker)`,
+    options.prime?.on && `7 cartes : ${fmt(options.prime.amount)} au premier (${req(options.prime)}, sans joker)`,
+    options.ten?.on && `10 cartes : ${fmt(options.ten.amount)} au premier (${req(options.ten)}, sans joker)`,
   ].filter(Boolean);
   return list.length ? list : ["Aucune option"];
 };

@@ -47,6 +47,7 @@ export const api = {
   publicTable: (id) => call(`/tables/${id}/public`),
   queueTable: (id) => call(`/tables/${id}/queue`, "POST"),
   unqueueTable: (id) => call(`/tables/${id}/unqueue`, "POST"),
+  rematchTable: (id, stake) => call(`/tables/${id}/rematch`, "POST", { stake }),
   tableAction: (id, a) => call(`/tables/${id}/action`, "POST", a),
   pokerTables: () => call("/poker"),
   pokerCreate: (b) => call("/poker", "POST", b),

@@ -5,7 +5,7 @@ import RamiOnline from "../games/RamiOnline";
 import DominoOnline from "../games/DominoOnline";
 import ChatDock from "../components/Chat";
 
-export default function TableRoom({ id, user, onExit }) {
+export default function TableRoom({ id, user, onExit, onOpen }) {
   const [v, setV] = useState(null);
   const [err, setErr] = useState("");
   const [copied, setCopied] = useState(false);
@@ -27,7 +27,7 @@ export default function TableRoom({ id, user, onExit }) {
   // chat : en salle d'attente et pendant la partie ; il disparaît dès que la partie est terminée
   const finished = v.status === "finished" || (v.game && v.game.winner !== null && v.game.winner !== undefined);
   const chat = v.status !== "cancelled" && !finished ? <ChatDock kind="table" id={id} me={user} /> : null;
-  if (v.game) return <>{kind === "domino" ? <DominoOnline view={v} act={act} onExit={() => onExit(kind)} /> : <RamiOnline view={v} act={act} onExit={() => onExit(kind)} />}{chat}</>;
+  if (v.game) return <>{kind === "domino" ? <DominoOnline view={v} act={act} onOpen={onOpen} onExit={() => onExit(kind)} /> : <RamiOnline view={v} act={act} onOpen={onOpen} onExit={() => onExit(kind)} />}{chat}</>;
   if (v.status === "cancelled")
     return (
       <div className="shell"><h2>Table annulée</h2><p className="sub">Les mises ont été remboursées.</p>

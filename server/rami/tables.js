@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "../db.js";
 import { registerChecker, closeRoom } from "../chat.js";
 import { requireAuth, wrap } from "../auth.js";
-import { adjust, HttpError } from "./money.js";
+import { adjust, HttpError, MIN_STAKE, MAX_STAKE } from "./money.js";
 import * as E from "./engine.js";
 import * as rami from "./game.js";
 import * as domino from "../domino/game.js";
@@ -322,6 +322,37 @@ r.post("/:id/unqueue", wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Revanche : à la fin d'une partie, le premier joueur qui clique crée une nouvelle table (mêmes règles, mêmes places).
+// Il choisit la mise de la revanche (les perdants peuvent « re-miser » : même mise, ×2, ou une autre somme) ; les autres la rejoignent.
+r.post("/:id/rematch", wrap(async (req, res) => {
+  const id = +req.params.id;
+  const out = await inTx(async (tx) => {
+    const t = await loadTable(id, tx);
+    if (t.status !== "finished") throw bad("La partie n'est pas terminée");
+    const g = JSON.parse(t.state);
+    if (!g.seats?.includes(req.user.id)) throw bad("Tu ne jouais pas à cette table", 403);
+    if (g.rematchId) return { id: g.rematchId, created: false }; // une revanche existe déjà : on la rejoint
+    const stake = Number(req.body?.stake ?? t.stake);
+    if (!Number.isInteger(stake) || stake < MIN_STAKE || stake > MAX_STAKE) throw bad(`Mise : entre ${MIN_STAKE} et ${MAX_STAKE} Ar`);
+    const o = t.config?.options || {};
+    const prizes = ["carre", "ten", "prime"].reduce((a, k) => a + (o[k]?.on ? Number(o[k].amount) || 0 : 0), 0);
+    if (prizes > stake * (t.max_players - 1)) throw bad(`Avec ces primes, la mise doit être d'au moins ${Math.ceil(prizes / (t.max_players - 1))} Ar`);
+    if (await myActive(req.user.id, tx)) throw bad("Tu es déjà à une table", 409);
+    if (await myQueue(req.user.id, tx)) throw bad("Quitte d'abord ta liste d'attente", 409);
+    const ins = await tx.execute({
+      sql: "INSERT INTO game_tables (game, creator_id, stake, max_players, config) VALUES (?, ?, ?, ?, ?)",
+      args: [t.game, req.user.id, stake, t.max_players, JSON.stringify(t.config)],
+    });
+    const tid = Number(ins.lastInsertRowid);
+    await adjust(tx, req.user.id, -stake, "bet", `Table #${tid} (revanche de #${id})`);
+    await tx.execute({ sql: "INSERT INTO table_players (table_id, user_id, locked) VALUES (?, ?, ?)", args: [tid, req.user.id, stake] });
+    g.rematchId = tid;
+    await tx.execute({ sql: "UPDATE game_tables SET state = ? WHERE id = ?", args: [JSON.stringify(g), id] });
+    return { id: tid, created: true };
+  });
+  res.status(201).json(out);
+}));
+
 r.get("/:id", wrap(async (req, res) => {
   const id = +req.params.id;
   const t = await loadTable(id);
@@ -330,7 +361,16 @@ r.get("/:id", wrap(async (req, res) => {
   let g = null;
   if (t.status === "playing") g = entryOf(t).g;
   else if (t.status === "finished") g = JSON.parse(t.state);
-  res.json({ ...fullView(t, g, req.user.id, ps), waiting: await waitCount(id) });
+  // revanche proposée à la fin de la partie
+  let rematch = null;
+  if (g?.rematchId) {
+    const rt = await loadTable(g.rematchId).catch(() => null);
+    if (rt && rt.status !== "cancelled") {
+      const rps = await players(rt.id);
+      rematch = { id: rt.id, status: rt.status, stake: rt.stake, maxPlayers: rt.max_players, players: rps.length, joined: rps.some((p) => p.user_id === req.user.id), creator: rps.find((p) => p.user_id === rt.creator_id)?.pseudo || "?" };
+    }
+  }
+  res.json({ ...fullView(t, g, req.user.id, ps), waiting: await waitCount(id), rematch });
 }));
 
 r.post("/:id/action", wrap(async (req, res) => {

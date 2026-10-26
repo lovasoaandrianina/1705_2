@@ -1006,3 +1006,14 @@ html[data-theme="dark"] .brand-logo {
 .gico.rami .red { color: #c62828; }
 .avatar-btn { background: none; border: 0; padding: 0; cursor: pointer; border-radius: 50%; }
 .avatar-btn:hover { outline: 2px solid var(--gold); }
+
+/* Sous-options des primes 7 / 10 cartes (libre · tri · suite) */
+.subopts {
+  margin: -2px 0 10px 10px;
+  padding-left: 12px;
+  border-left: 2px solid #f2e5a9;
+}
+.subopts .chk {
+  margin: 6px 0;
+  font-size: 13px;
+}

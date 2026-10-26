@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, Opp, css, isJoker } from "./Rami";
 import { fmt } from "../config";
+import Rematch from "../components/Rematch";
 import SoundToggle from "../components/SoundToggle";
 import { play, useWatch } from "../sound";
 
@@ -20,32 +21,45 @@ const EXTRA = `.claims{font-size:11px;text-align:center;padding:3px 8px;backgrou
 .recap div{display:flex;justify-content:space-between;gap:16px;padding:2px 0}
 .recap .fee{color:#ffb4b4}
 .recap .tot{border-top:1px solid #fff4;margin-top:4px;padding-top:4px;font-weight:800;color:#ffd54a}
-.claimbar{padding:0 10px 2px;gap:5px}
-.claimbar button{flex:1;min-width:0;background:#7c3aed;border-color:#b9a2f5;color:#fff;font-size:10px;line-height:1.1;padding:4px 3px;border-radius:9px;min-height:25px}
-.claimbar button:disabled{opacity:.45}
-.flash{position:absolute;left:50%;top:36%;z-index:250000;display:flex;flex-direction:column;align-items:center;gap:2px;padding:16px 30px;
-  border-radius:20px;background:#ffd54a;color:#2b2200;text-align:center;pointer-events:none;box-shadow:0 0 0 5px #fff9,0 12px 44px #000b;
-  animation:flash 7s ease forwards}
-.flash b{font-size:32px;letter-spacing:2px}.flash span{font-size:22px;font-weight:800}.flash small{font-size:13px}
-@keyframes flash{0%{transform:translate(-50%,-50%) scale(.3);opacity:0}8%{transform:translate(-50%,-50%) scale(1.18);opacity:1}14%{transform:translate(-50%,-50%) scale(1)}85%{opacity:1}100%{transform:translate(-50%,-50%) scale(1);opacity:0}}`;
+.claimbar{padding-bottom:0;justify-content:center;gap:6px}
+.claimbar button{flex:0 1 auto;min-height:26px;height:26px;background:#7c3aed;border-color:#c4b5fd;color:#fff;font-size:11px;font-weight:700;line-height:1;padding:0 10px;border-radius:999px}
+.cstack{position:absolute;left:50%;top:6px;transform:translateX(-50%);z-index:150000;width:min(96%,460px);max-height:72dvh;overflow:auto;
+  display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.cpanel{pointer-events:auto;background:#0b3d24f2;border:2px solid #ffd54a;border-radius:16px;padding:10px 12px 12px;text-align:center;
+  box-shadow:0 10px 36px #000a;animation:cpin .35s ease-out}
+.cp-h{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cp-t{flex:1;text-align:left;font-size:17px;font-weight:800;line-height:1.2;color:#ffd54a}
+.cp-t em{font-style:normal;color:#fff;font-weight:700}
+.cp-x{flex:none;min-height:34px;padding:4px 12px;border-radius:10px;border:1px solid #fff6;background:#ffffff1f;color:#fff;font-weight:700;font-size:13px;cursor:pointer}
+.cp-s{margin:4px 0 8px;font-size:12px;opacity:.9;text-align:left}
+.cp-g{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.cp-bar{height:4px;border-radius:4px;background:#ffffff26;margin-top:10px;overflow:hidden}
+.cp-bar i{display:block;height:100%;background:#ffd54a;transition:width 1s linear}
+@keyframes cpin{from{transform:translateY(-14px) scale(.96);opacity:0}to{transform:none;opacity:1}}`;
 
-export default function RamiOnline({ view, act, onExit }) {
+export default function RamiOnline({ view, act, onExit, onOpen }) {
   const g = view.game, N = g.N, me = g.seat;
   const o = view.config.options, cl = g.claims || {};
   const prev = useRef({ carre: cl.carre ?? null, ten: cl.ten ?? null, prime: cl.prime ?? null });
-  const [flash, setFlash] = useState(null); // bannière plein écran quand quelqu'un décroche une prime
-  const [showClaim, setShowClaim] = useState(null); // « carre » | « ten » : revoir les cartes d'une prime
+  // Panneaux « prime » : à chaque prime décrochée, TOUS les joueurs voient le nom + les 7 / 10 cartes pendant 30 s (bouton Fermer)
+  const KINDS = [["carre", "CARRÉ"], ["prime", "7 CARTES"], ["ten", "10 CARTES"]];
+  const [panels, setPanels] = useState(() => { // reconnexion en cours de minuterie : on réaffiche les primes encore visibles
+    const init = {};
+    for (const [k] of KINDS) if (cl[k] != null && (g.claimMs?.[k] ?? 0) > 0) init[k] = view.fetchedAt + g.claimMs[k];
+    return init;
+  });
   useEffect(() => {
-    for (const [k, label, amt] of [["carre", "CARRÉ", o.carre?.amount], ["ten", "10 CARTES", o.ten?.amount], ["prime", "PRIME", o.prime?.amount]]) {
+    for (const [k] of KINDS) {
       const now = cl[k] ?? null;
       if (now !== null && prev.current[k] === null) {
         play("claim");
-        setFlash({ id: Date.now(), label, amt, who: now === me ? "Toi !" : g.names[now], groups: (g.claimCards || {})[k] || [] });
-        setTimeout(() => setFlash(null), 7000);
+        setPanels((p) => ({ ...p, [k]: view.fetchedAt + (g.claimMs?.[k] ?? 30000) }));
       }
       prev.current[k] = now;
     }
-  }, [cl.carre, cl.ten]);
+  }, [cl.carre, cl.prime, cl.ten]); // eslint-disable-line
+  const closePanel = (k) => setPanels((p) => { const n = { ...p }; delete n[k]; return n; });
+  const openPanel = (k) => cl[k] != null && setPanels((p) => ({ ...p, [k]: Infinity })); // « revoir » : reste affiché jusqu'à Fermer
   const [sel, setSel] = useState(null);
   const [order, setOrder] = useState(() => g.hand.map((c) => c.id));
   const [mode, setMode] = useState("suit");
@@ -160,7 +174,7 @@ export default function RamiOnline({ view, act, onExit }) {
   for (let rel = 1; rel < N; rel++) bySlot[slots[rel]] = rel;
   const opp = (rel) => {
     const s = (me + rel) % N;
-    return <Opp key={s} i={s} name={g.names[s]} n={g.counts[s]} active={live && g.turn === s} dur={g.turnMs} tick={g.turnNo} avatar={(g.avatars || [])[s]} horizontal={N === 2} />;
+    return <Opp key={s} i={s} name={g.names[s]} n={g.counts[s]} active={live && g.turn === s} dur={g.turnMs} tick={g.turnNo} avatar={(g.avatars || [])[s]} />;
   };
   const drawnCard = g.drawn && byId[g.drawn.id];
 
@@ -208,9 +222,9 @@ export default function RamiOnline({ view, act, onExit }) {
 
       <div className="claims">
         Pot {fmt(view.pot)}
-        {o.carre?.on && <span className={`pill ${cl.carre == null ? "" : "got"}`}>🏆 Carré : {cl.carre == null ? `libre (${fmt(o.carre.amount)})` : `${g.names[cl.carre]}`}</span>}
-        {o.prime?.on && <span className={`pill ${cl.prime == null ? "" : "got"}`}>🏆 7 cartes : {cl.prime == null ? `libre (${fmt(o.prime.amount)})` : `${g.names[cl.prime]}`}</span>}
-        {o.ten?.on && <span className={`pill ${cl.ten == null ? "" : "got"}`}>🏆 10 cartes : {cl.ten == null ? `libre (${fmt(o.ten.amount)})` : `${g.names[cl.ten]}`}</span>}
+        {o.carre?.on && <span className={`pill ${cl.carre == null ? "" : "got"}`} onClick={() => openPanel("carre")}>🏆 Carré : {cl.carre == null ? `libre (${fmt(o.carre.amount)})` : `${g.names[cl.carre]}`}</span>}
+        {o.prime?.on && <span className={`pill ${cl.prime == null ? "" : "got"}`} onClick={() => openPanel("prime")}>🏆 7 cartes : {cl.prime == null ? `libre (${fmt(o.prime.amount)})` : `${g.names[cl.prime]}`}</span>}
+        {o.ten?.on && <span className={`pill ${cl.ten == null ? "" : "got"}`} onClick={() => openPanel("ten")}>🏆 10 cartes : {cl.ten == null ? `libre (${fmt(o.ten.amount)})` : `${g.names[cl.ten]}`}</span>}
         <SoundToggle className="pill" style={{ border: 0, color: "#fff", cursor: "pointer" }} />
         {g.vote?.done && <span className="pill">{g.vote.accepted ? "Mise doublée ×2" : "×2 refusé"}</span>}
       </div>
@@ -234,7 +248,9 @@ export default function RamiOnline({ view, act, onExit }) {
 
       <div ref={handRef} className={`hand grouped ${myTurn ? "turn" : ""}`} onPointerDown={hDown} onPointerMove={hMove} onPointerUp={hUp} onPointerCancel={() => { hd.current = null; setGhost(null); }}>
         {(() => {
-          const sizes = cards.length >= 14 ? [4, 5, 5] : [4, 4, 5];
+          // 13 cartes = 4+3+3+3 ; après pioche, la 14e carte doit être visible.
+          // Le découpage est recalculé depuis le nombre réel de cartes, sans jamais en omettre.
+          const sizes = cards.length <= 13 ? [4, 3, 3, 3] : [4, 4, 3, 3, ...Array(Math.ceil((cards.length - 14) / 4)).fill(4)];
           let i = 0;
           return sizes.map((sz, gi) => {
             const chunk = cards.slice(i, i + sz);
@@ -272,21 +288,33 @@ export default function RamiOnline({ view, act, onExit }) {
         </div>
       )}
 
-      {flash && <div className="flash" key={flash.id}><b>{flash.label} !</b><span>{flash.who}</span><small>prime de {fmt(flash.amt)} sur le pot · cartes montrées à tous</small><div className="fcards">{flash.groups.map((grp, i) => <div key={i} className="grp">{grp.map((c) => <Card key={c.id} sm c={c} />)}</div>)}</div></div>}
-
-      {showClaim && cl[showClaim] != null && (
-        <div className="ov" 
-        // onClick={() => setShowClaim(null)}
-        >
-          <div className="box wide">
-            <p>{showClaim === "carre" ? "Carré" : "10 cartes"} de {g.names[cl[showClaim]]}</p>
-            <div className="groups">{((g.claimCards || {})[showClaim] || []).map((grp, i) => <div key={i} className="grp">{grp.map((c) => <Card key={c.id} sm c={c} />)}</div>)}</div>
-            <button className="go big"
-            //  onClick={() => setShowClaim(null)}
-             >Fermer</button>
+      {(() => {
+        const list = KINDS.filter(([k]) => cl[k] != null && panels[k] !== undefined && panels[k] > Date.now());
+        if (!list.length) return null;
+        return (
+          <div className="cstack">
+            {list.map(([k, label]) => {
+              const left = panels[k] === Infinity ? null : Math.max(0, panels[k] - Date.now());
+              const who = cl[k] === me ? `${g.names[cl[k]]} (toi)` : g.names[cl[k]];
+              return (
+                <div className="cpanel" key={k + cl[k]} role="dialog" aria-label={`${label} de ${g.names[cl[k]]}`}>
+                  <div className="cp-h">
+                    <div className="cp-t">🏆 {who} <em>· {label}</em></div>
+                    <button type="button" className="cp-x" onClick={() => closePanel(k)}>Fermer ✕</button>
+                  </div>
+                  <div className="cp-s">Prime de {fmt(o[k]?.amount)} · cartes montrées à tous{left !== null && ` · ${Math.ceil(left / 1000)} s`}</div>
+                  <div className="cp-g">
+                    {((g.claimCards || {})[k] || []).map((grp, i) => (
+                      <div key={i} className="grp">{grp.map((c) => <Card key={c.id} sm c={c} />)}</div>
+                    ))}
+                  </div>
+                  {left !== null && <div className="cp-bar"><i style={{ width: `${Math.min(100, (left / 30000) * 100)}%` }} /></div>}
+                </div>
+              );
+            })}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {ghost && byId[ghost.id] && <Card c={byId[ghost.id]} className="ghost" style={{ left: ghost.x - 19, top: ghost.y - 19 }} />}
 
@@ -326,7 +354,8 @@ export default function RamiOnline({ view, act, onExit }) {
                 </>
               );
             })()}
-            <button className="go big" onClick={onExit}>Retour</button>
+            <Rematch view={view} onOpen={onOpen} lost={g.result ? Math.max(0, g.result.staked[me] - g.result.paid[me]) : 0} />
+            <button className="big" onClick={onExit}>Retour</button>
           </div>
         </div>
       )}

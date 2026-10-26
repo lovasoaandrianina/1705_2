@@ -10,12 +10,13 @@ export function parseConfig(b) {
   if (!(stake >= MIN_STAKE && stake <= MAX_STAKE)) throw bad(`Mise : entre ${MIN_STAKE} et ${MAX_STAKE} Ar`);
   if (!(maxPlayers >= 2 && maxPlayers <= 5)) throw bad("Une table accueille 2 à 5 joueurs");
   const ru = b.rules || {}, op = b.options || {};
-  const bonus = (o, name) => {
+  const bonus = (o, name, withReq = false) => {
     const on = !!(o && o.on), amount = on ? int(o.amount) : 0;
     if (on && !(amount >= 1)) throw bad(`${name} : montant invalide`);
-    return { on, amount };
+    // 7 et 10 cartes : « libre » ou avec un tri (brelan/carré) et/ou une suite obligatoire
+    return withReq ? { on, amount, needSet: on && !!o.needSet, needRun: on && !!o.needRun } : { on, amount };
   };
-  const options = { x2: !!op.x2, carre: bonus(op.carre, "Carré"), ten: bonus(op.ten, "10 cartes"), prime: bonus(op.prime, "Prime") };
+  const options = { x2: !!op.x2, carre: bonus(op.carre, "Carré"), ten: bonus(op.ten, "10 cartes", true), prime: bonus(op.prime, "7 cartes", true) };
   const cap = stake * (maxPlayers - 1); // pot d'une table pleine moins une mise : le gagnant garde au moins sa mise
   if (options.carre.amount + options.ten.amount + options.prime.amount > cap) throw bad(`Les primes ne peuvent pas dépasser ${cap} Ar au total`);
   return { stake, maxPlayers, config: { rules: { needSet: !!ru.needSet, needRun: !!ru.needRun, joker: !!ru.joker }, options } };
@@ -43,7 +44,7 @@ export function plan(t, g, locked) {
   const pot = locked.reduce((s, x) => s + x, 0), o = t.config.options;
   let rest = pot;
   const bonus = [];
-  for (const [key, label] of [["carre", "Carré"], ["ten", "10 cartes"], ["prime", "Prime"]]) {
+  for (const [key, label] of [["carre", "Carré"], ["ten", "10 cartes"], ["prime", "7 cartes"]]) {
     const seat = g.claims?.[key];
     if (seat === null || seat === undefined || !o[key]?.on) continue;
     const amount = Math.min(o[key].amount, Math.max(0, rest - t.stake));
